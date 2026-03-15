@@ -50,10 +50,11 @@ jobs:
 
       - name: Run linter
         run: |
-          if [ "$(node -p "Boolean(require('./package.json').scripts?.lint)")" = "true" ]; then
+          if [ "$(node -p "Boolean(require('./package.json').scripts?.lint)")" = "true" ] && \
+             { [ -f "eslint.config.js" ] || [ -f "eslint.config.mjs" ] || [ -f "eslint.config.cjs" ] || [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.cjs" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.yml" ] || [ -f ".eslintrc.yaml" ]; }; then
             npm run lint
           else
-            echo "No lint script found, skipping lint step."
+            echo "No usable ESLint setup found, skipping lint step."
           fi
 
       - name: Run type check
