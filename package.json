@@ -57,10 +57,21 @@
 				"title": "SR Syntax: Restart Language Server"
 			}
 		],
-		"configuration": {
-			"type": "object",
-			"title": "Nokia SR Syntax",
-			"properties": {}
+		"configurationDefaults": {
+			"[sros]": {
+				"editor.quickSuggestions": {
+					"other": "inline",
+					"comments": "off",
+					"strings": "off"
+				}
+			},
+			"[srlinux]": {
+				"editor.quickSuggestions": {
+					"other": "inline",
+					"comments": "off",
+					"strings": "off"
+				}
+			}
 		}
 	},
 	"scripts": {
