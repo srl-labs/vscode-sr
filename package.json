@@ -15,7 +15,7 @@
 		"Linters"
 	],
 	"engines": {
-		"vscode": "^1.99.0"
+		"vscode": "^1.100.0"
 	},
 	"activationEvents": [],
 	"main": "./out/extension",
