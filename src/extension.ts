@@ -28,7 +28,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
-	const cmd = context.asAbsolutePath(path.join('bin', bin));
+	const localBin = context.asAbsolutePath(path.join('bin', bin));
+	const cmd = fs.existsSync(localBin) ? localBin : bin;
 
 	for (const [id, nos] of Object.entries(nosMap) as [NOSId, NOS][]) {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
