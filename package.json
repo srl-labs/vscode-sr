@@ -1,0 +1,89 @@
+{
+	"name": "sr-vscode",
+	"description": "VS Code Language extension for Nokia SR OS and SR Linux",
+	"author": "Kaelem Chandra",
+	"license": "GPL-2.0-only",
+	"version": "1.0.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/kaelemc/sr-vscode"
+	},
+	"categories": [],
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"activationEvents": [],
+	"main": "./out/extension",
+	"contributes": {
+		"languages": [
+			{
+				"id": "sros",
+				"aliases": [
+					"SR OS",
+					"sros"
+				],
+				"extensions": [
+					".sros.cfg"
+				],
+				"configuration": "./sros/langConfig.json"
+			},
+			{
+				"id": "srlinux",
+				"aliases": [
+					"SR Linux",
+					"srlinux"
+				],
+				"extensions": [
+					".srl.cfg"
+				],
+				"configuration": "./srlinux/langConfig.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "sros",
+				"scopeName": "source.sros",
+				"path": "./sros/tmLanguage.json"
+			},
+			{
+				"language": "srlinux",
+				"scopeName": "source.srlinux",
+				"path": "./srlinux/tmLanguage.json"
+			}
+		],
+		"commands": [
+			{
+				"command": "srSyntax.restartServer",
+				"title": "SR Syntax: Restart Language Server"
+			}
+		],
+		"configuration": {
+			"type": "object",
+			"title": "Nokia SR Syntax",
+			"properties": {}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -b",
+		"clean": "rm -rf out",
+		"watch": "tsc -b -w",
+		"lint": "eslint"
+	},
+	"dependencies": {
+		"glob": "^11.0.0",
+		"tar": "^7.5.9",
+		"vscode-languageclient": "^9.0.1"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/mocha": "^10.0.6",
+		"@types/node": "^22",
+		"@types/vscode": "^1.100.0",
+		"@vscode/test-electron": "^2.3.9",
+		"eslint": "^9.13.0",
+		"typescript": "^5.9.2",
+		"typescript-eslint": "^8.39.0"
+	}
+}
