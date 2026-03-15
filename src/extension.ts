@@ -31,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const localBin = context.asAbsolutePath(path.join('bin', bin));
 	const cmd = fs.existsSync(localBin) ? localBin : bin;
 
-	for (const [id, nos] of Object.entries(nosMap) as [NOSId, NOS][]) {
+	const startPromises = (Object.entries(nosMap) as [NOSId, NOS][]).map(([id, nos]) => {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
 
 		const serverOptions: lsp.ServerOptions = {
@@ -54,16 +54,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		);
 
 		registerNotifications(client, nos);
-		await client.start();
 		clients.set(id, client);
-	}
+		return client.start();
+	});
+	await Promise.all(startPromises);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('srSyntax.restartServer', async () => {
 			documents.clear();
-			for (const client of clients.values()) {
-				await client.restart();
-			}
+			await Promise.all(Array.from(clients.values(), (client) => client.restart()));
 			vscode.window.setStatusBarMessage('LSP servers restarted', 2000);
 		})
 	);
@@ -108,7 +107,5 @@ function updateStatusBar() {
 }
 
 export async function deactivate(): Promise<void> {
-	for (const client of clients.values()) {
-		await client.stop();
-	}
+	await Promise.all(Array.from(clients.values(), (client) => client.stop()));
 }

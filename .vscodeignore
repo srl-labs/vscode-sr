@@ -2,6 +2,7 @@
 .git/**
 .github/**
 .gitignore
+AGENTS.md
 
 # Local/editor artifacts
 .vscode/**
@@ -14,45 +15,19 @@ yarn-error.log*
 src/**
 tsconfig*.json
 *.tsbuildinfo
-*.ts
 .eslintrc*
 eslint.config.*
-
-# Keep compiled JS only
 out/**/*.map
+
+# Test/doc/dev-only files
+test/**
+**/*.test.*
+**/__tests__/**
+**/__mocks__/**
+scripts/**
+report/**
+patch.sh
+CLAUDE.md
 
 # NPM metadata not required at runtime
 package-lock.json
-
-# Trim dependency bloat
-node_modules/**/.github/**
-node_modules/**/.git/**
-node_modules/**/.vscode/**
-node_modules/**/.idea/**
-node_modules/**/test/**
-node_modules/**/tests/**
-node_modules/**/__tests__/**
-node_modules/**/example/**
-node_modules/**/examples/**
-node_modules/**/docs/**
-node_modules/**/doc/**
-node_modules/**/benchmark/**
-node_modules/**/benchmarks/**
-node_modules/**/coverage/**
-node_modules/**/src/**
-node_modules/**/dist/esm/**
-node_modules/**/browser/**
-node_modules/**/browser.*
-node_modules/**/*.d.ts
-node_modules/**/*.d.mts
-node_modules/**/*.d.cts
-node_modules/**/*.map
-node_modules/**/tsconfig*.json
-node_modules/**/README*
-node_modules/**/CHANGELOG*
-node_modules/**/CHANGES*
-node_modules/**/HISTORY*
-node_modules/**/CONTRIBUTING*
-node_modules/**/SECURITY*
-node_modules/**/AUTHORS*
-node_modules/**/CODE_OF_CONDUCT*

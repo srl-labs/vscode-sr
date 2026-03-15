@@ -1,14 +1,19 @@
 {
 	"name": "sr-vscode",
+	"publisher": "srl-labs",
 	"description": "VS Code Language extension for Nokia SR OS and SR Linux",
-	"author": "Kaelem Chandra",
+	"author": "SRL Labs",
 	"license": "GPL-2.0-only",
-	"version": "1.0.0",
+	"version": "0.1.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/kaelemc/sr-vscode"
+		"url": "https://github.com/srl-labs/sr-vscode"
 	},
-	"categories": [],
+	"categories": [
+		"Language Packs",
+		"Programming Languages",
+		"Linters"
+	],
 	"engines": {
 		"vscode": "^1.100.0"
 	},
@@ -79,7 +84,9 @@
 		"compile": "tsc -b",
 		"clean": "rm -rf out",
 		"watch": "tsc -b -w",
-		"lint": "eslint"
+		"lint": "npm run lint:oxlint",
+		"lint:oxlint": "oxlint .",
+		"package": "npx --yes @vscode/vsce package"
 	},
 	"dependencies": {
 		"glob": "^11.0.0",
@@ -94,6 +101,7 @@
 		"@types/vscode": "^1.100.0",
 		"@vscode/test-electron": "^2.3.9",
 		"eslint": "^9.13.0",
+		"oxlint": "^1.55.0",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.39.0"
 	}

@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "builtin": true,
+    "node": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "eslint/curly": "error",
+    "eslint/eqeqeq": "error",
+    "eslint/no-console": "warn",
+    "eslint/no-debugger": "error",
+    "eslint/no-duplicate-imports": "warn",
+    "eslint/no-implicit-coercion": "warn",
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "warn",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-misused-promises": "warn"
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    "out/**",
+    "**/*.vsix"
+  ]
+}
