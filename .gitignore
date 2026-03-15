@@ -1,4 +1,12 @@
-out
-node_modules
+node_modules/
+out/
+dist/
+
 .DS_Store
+.vscode/
+.vscode-test/
+
 *.tsbuildinfo
+*.vsix
+npm-debug.log*
+yarn-error.log*
