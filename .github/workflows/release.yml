@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Only run on the main repository, not on forks
+    if: github.repository == 'srl-labs/vscode-sr'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.target_commitish }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate version
+        id: version
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "package=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          TAG_VERSION="${TAG_NAME#v}"
+          echo "tag=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch:"
+            echo "  package.json version: $PACKAGE_VERSION"
+            echo "  release tag version: $TAG_VERSION"
+            exit 1
+          fi
+
+          echo "Version validation passed: $PACKAGE_VERSION"
+
+      - name: Run linter
+        run: |
+          if [ "$(node -p "Boolean(require('./package.json').scripts?.lint)")" = "true" ] && \
+             { [ -f "eslint.config.js" ] || [ -f "eslint.config.mjs" ] || [ -f "eslint.config.cjs" ] || [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.cjs" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.yml" ] || [ -f ".eslintrc.yaml" ]; }; then
+            npm run lint
+          else
+            echo "No usable ESLint setup found, skipping lint step."
+          fi
+
+      - name: Run type check
+        run: |
+          if [ "$(node -p "Boolean(require('./package.json').scripts?.typecheck)")" = "true" ]; then
+            npm run typecheck
+          else
+            echo "No typecheck script found, skipping type check."
+          fi
+
+      - name: Run tests
+        run: |
+          if [ "$(node -p "Boolean(require('./package.json').scripts?.test)")" = "true" ]; then
+            npm test
+          else
+            echo "No test script found, skipping tests."
+          fi
+
+      - name: Build extension
+        run: |
+          if [ "$(node -p "Boolean(require('./package.json').scripts?.bundle)")" = "true" ]; then
+            npm run bundle
+          else
+            echo "No bundle script found, skipping build."
+          fi
+
+      - name: Package extension
+        run: npx vsce package -o "${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix"
+
+      - name: Check for publish tokens
+        id: check-pat
+        run: |
+          if [ -n "${{ secrets.VSCE_PAT }}" ]; then
+            echo "has_vsce_pat=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_vsce_pat=false" >> $GITHUB_OUTPUT
+            echo "⚠️ VSCE_PAT secret not configured - skipping marketplace publish"
+          fi
+
+          if [ -n "${{ secrets.OVSX_PAT }}" ]; then
+            echo "has_ovsx_pat=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_ovsx_pat=false" >> $GITHUB_OUTPUT
+            echo "⚠️ OVSX_PAT secret not configured - skipping Open VSX publish"
+          fi
+
+      - name: Publish to VS Code Marketplace
+        if: steps.check-pat.outputs.has_vsce_pat == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix" -p "$VSCE_PAT"
+
+      - name: Publish to Open VSX Registry
+        if: steps.check-pat.outputs.has_ovsx_pat == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish --packagePath "${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix" -p "$OVSX_PAT"
+
+      - name: Upload VSIX to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix
+          fail_on_unmatched_files: true
