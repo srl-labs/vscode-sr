@@ -84,7 +84,8 @@
 		"compile": "tsc -b",
 		"clean": "rm -rf out",
 		"watch": "tsc -b -w",
-		"lint": "eslint",
+		"lint": "npm run lint:oxlint",
+		"lint:oxlint": "oxlint .",
 		"package": "npx --yes @vscode/vsce package"
 	},
 	"dependencies": {
@@ -100,6 +101,7 @@
 		"@types/vscode": "^1.100.0",
 		"@vscode/test-electron": "^2.3.9",
 		"eslint": "^9.13.0",
+		"oxlint": "^1.55.0",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.39.0"
 	}
