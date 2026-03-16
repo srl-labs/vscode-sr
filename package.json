@@ -68,14 +68,16 @@
 					"other": "inline",
 					"comments": "off",
 					"strings": "off"
-				}
+				},
+				"editor.semanticHighlighting.enabled": true
 			},
 			"[srlinux]": {
 				"editor.quickSuggestions": {
 					"other": "inline",
 					"comments": "off",
 					"strings": "off"
-				}
+				},
+				"editor.semanticHighlighting.enabled": true
 			}
 		}
 	},
