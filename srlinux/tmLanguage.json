@@ -3,74 +3,12 @@
 	"name": "Nokia SR Linux",
 	"scopeName": "source.srlinux",
 	"patterns": [
-		{ "include": "#line-comment" },
-		{ "include": "#block-comment" },
-		{ "include": "#flat-line" },
-		{ "include": "#block" },
-		{ "include": "#leaf-assignment" }
+		{ "include": "#line-comment" }
 	],
 	"repository": {
 		"line-comment": {
-			"match": "^\\s*(//|#).*$",
+			"match": "^\\s*(//|#|!).*$",
 			"name": "comment.line.srlinux"
-		},
-		"block-comment": {
-			"begin": "/\\*",
-			"end": "\\*/",
-			"name": "comment.block.srlinux"
-		},
-		"flat-line": {
-			"begin": "^\\s*(/)",
-			"beginCaptures": {
-				"1": { "name": "punctuation.separator.path.srlinux" }
-			},
-			"end": "$",
-			"patterns": [
-				{ "include": "#flat-quoted-value" },
-				{ "include": "#flat-boolean" },
-				{ "include": "#flat-number" },
-				{ "include": "#flat-keyword" }
-			]
-		},
-		"flat-keyword": {
-			"match": "[\\w][\\w.-]*",
-			"name": "keyword.control.srlinux"
-		},
-		"flat-quoted-value": {
-			"match": "\"[^\"]*\"",
-			"name": "entity.name.tag.srlinux"
-		},
-		"flat-boolean": {
-			"match": "\\b(true|false|enable|disable)\\b",
-			"name": "constant.language.boolean.srlinux"
-		},
-		"flat-number": {
-			"match": "\\b\\d+(\\.\\d+)?\\b",
-			"name": "constant.numeric.srlinux"
-		},
-		"block": {
-			"begin": "\\b([\\w][\\w.-]*)(?:\\s+(\"[^\"]*\"|[\\w][\\w./:+-]*))?\\s*\\{",
-			"beginCaptures": {
-				"1": { "name": "keyword.control.srlinux" },
-				"2": { "name": "entity.name.tag.srlinux" }
-			},
-			"end": "\\}",
-			"endCaptures": {
-				"0": { "name": "punctuation.section.block.end.srlinux" }
-			},
-			"patterns": [
-				{ "include": "#line-comment" },
-				{ "include": "#block-comment" },
-				{ "include": "#block" },
-				{ "include": "#leaf-assignment" }
-			]
-		},
-		"leaf-assignment": {
-			"match": "^\\s*([\\w][\\w.-]*)\\s+(\"[^\"]*\"|true|false|enable|disable|\\d+(\\.\\d+)?|[\\w][\\w./:+-]*)\\s*$",
-			"captures": {
-				"1": { "name": "keyword.other.leaf.srlinux" },
-				"2": { "name": "string.unquoted.value.srlinux" }
-			}
 		}
 	}
 }

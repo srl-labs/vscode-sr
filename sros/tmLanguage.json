@@ -4,41 +4,9 @@
 	"scopeName": "source.sros",
 	"patterns": [
 		{ "include": "#comment" },
-		{ "include": "#flat-line" },
-		{ "include": "#persistent-indices" },
-		{ "include": "#block" },
-		{ "include": "#leaf-assignment" }
+		{ "include": "#persistent-indices" }
 	],
 	"repository": {
-		"flat-line": {
-			"begin": "^\\s*(/)",
-			"beginCaptures": {
-				"1": { "name": "punctuation.separator.path.sros" }
-			},
-			"end": "$",
-			"patterns": [
-				{ "include": "#flat-quoted-value" },
-				{ "include": "#flat-boolean" },
-				{ "include": "#flat-number" },
-				{ "include": "#flat-keyword" }
-			]
-		},
-		"flat-keyword": {
-			"match": "[\\w][\\w.-]*",
-			"name": "keyword.control.sros"
-		},
-		"flat-quoted-value": {
-			"match": "\"[^\"]*\"",
-			"name": "entity.name.tag.sros"
-		},
-		"flat-boolean": {
-			"match": "\\b(true|false)\\b",
-			"name": "constant.language.boolean.sros"
-		},
-		"flat-number": {
-			"match": "\\b\\d+(\\.\\d+)?\\b",
-			"name": "constant.numeric.sros"
-		},
 		"comment": {
 			"match": "^\\s*#.*$",
 			"name": "comment.line.number-sign.sros"
@@ -54,30 +22,6 @@
 				{ "include": "#persistent-indices" },
 				{ "match": "[^{}]+", "name": "comment.block.persistent-indices.sros" }
 			]
-		},
-		"block": {
-			"begin": "\\b([\\w][\\w.-]*)(?:\\s+(\"[^\"]*\"|[\\w][\\w./:+-]*))?\\s*\\{",
-			"beginCaptures": {
-				"1": { "name": "keyword.control.sros" },
-				"2": { "name": "entity.name.tag.sros" }
-			},
-			"end": "\\}",
-			"endCaptures": {
-				"0": { "name": "punctuation.section.block.end.sros" }
-			},
-			"patterns": [
-				{ "include": "#comment" },
-				{ "include": "#persistent-indices" },
-				{ "include": "#block" },
-				{ "include": "#leaf-assignment" }
-			]
-		},
-		"leaf-assignment": {
-			"match": "^\\s*([\\w][\\w.-]*)\\s+(\"[^\"]*\"|true|false|\\d+(\\.\\d+)?|[\\w][\\w./:+-]*)\\s*$",
-			"captures": {
-				"1": { "name": "keyword.other.leaf.sros" },
-				"2": { "name": "string.unquoted.value.sros" }
-			}
 		}
 	}
 }
