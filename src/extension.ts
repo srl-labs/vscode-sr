@@ -283,9 +283,29 @@ function shouldTriggerSuggestForChange(change: vscode.TextDocumentContentChangeE
 		return false;
 	}
 
-	if (change.text.includes('\n') || change.text.includes('\r')) {
+	if (change.text.includes('\r')) {
 		return false;
 	}
 
-	return change.text.endsWith(' ');
+	if (change.text.endsWith(' ')) {
+		return true;
+	}
+
+	// Enter in an indented block typically inserts a single newline plus spaces/tabs.
+	// Trigger suggestions for that case but avoid noisy triggers for multi-line paste.
+	if (change.text.includes('\n')) {
+		if (change.rangeLength !== 0) {
+			return false;
+		}
+
+		const newlineCount = change.text.split('\n').length - 1;
+		if (newlineCount !== 1) {
+			return false;
+		}
+
+		const nonWhitespace = change.text.replace(/\n/g, '').replace(/[ \t]/g, '');
+		return nonWhitespace.length === 0;
+	}
+
+	return false;
 }
