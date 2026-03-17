@@ -76,25 +76,27 @@
 				}
 			]
 		},
-		"configurationDefaults": {
-			"[sros]": {
-				"editor.quickSuggestions": {
-					"other": "inline",
-					"comments": "off",
-					"strings": "off"
+			"configurationDefaults": {
+				"[sros]": {
+					"editor.quickSuggestions": {
+						"other": "on",
+						"comments": "off",
+						"strings": "off"
+					},
+					"editor.suggestOnTriggerCharacters": true,
+					"editor.semanticHighlighting.enabled": true
 				},
-				"editor.semanticHighlighting.enabled": true
-			},
-			"[srlinux]": {
-				"editor.quickSuggestions": {
-					"other": "inline",
-					"comments": "off",
-					"strings": "off"
-				},
-				"editor.semanticHighlighting.enabled": true
+				"[srlinux]": {
+					"editor.quickSuggestions": {
+						"other": "on",
+						"comments": "off",
+						"strings": "off"
+					},
+					"editor.suggestOnTriggerCharacters": true,
+					"editor.semanticHighlighting.enabled": true
+				}
 			}
-		}
-	},
+		},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -b",

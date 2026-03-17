@@ -35,6 +35,27 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => updateStatusBar())
 	);
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeTextDocument((event) => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor || editor.document.uri.toString() !== event.document.uri.toString()) {
+				return;
+			}
+
+			if (!(editor.document.languageId in nosMap)) {
+				return;
+			}
+
+			const shouldTriggerSuggest = event.contentChanges.some(shouldTriggerSuggestForChange);
+			if (!shouldTriggerSuggest) {
+				return;
+			}
+
+			setTimeout(() => {
+				void vscode.commands.executeCommand('editor.action.triggerSuggest');
+			}, 0);
+		})
+	);
 
 	let cmd: string;
 	try {
@@ -255,4 +276,16 @@ async function ensureSrplsBinary(spec: SrplsBinarySpec): Promise<string> {
 	);
 
 	return dstPath;
+}
+
+function shouldTriggerSuggestForChange(change: vscode.TextDocumentContentChangeEvent): boolean {
+	if (!change.text) {
+		return false;
+	}
+
+	if (change.text.includes('\n') || change.text.includes('\r')) {
+		return false;
+	}
+
+	return change.text.endsWith(' ');
 }
