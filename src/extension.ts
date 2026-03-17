@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import * as lsp from 'vscode-languageclient/node';
 import {
@@ -8,8 +9,16 @@ import {
 } from './nos';
 import { sros } from './sros';
 import { srlinux } from './srlinux';
+import * as utils from './utils';
 
 let statusBar: vscode.StatusBarItem;
+const SRPLS_VERSION = 'v0.1.0';
+const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
+
+interface SrplsBinarySpec {
+	assetName: string;
+	targetName: string;
+}
 
 const nosMap: Record<NOSId, NOS> = {
 	sros,
@@ -27,9 +36,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.window.onDidChangeActiveTextEditor(() => updateStatusBar())
 	);
 
-	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
-	const localBin = context.asAbsolutePath(path.join('bin', bin));
-	const cmd = fs.existsSync(localBin) ? localBin : bin;
+	let cmd: string;
+	try {
+		cmd = await resolveSrplsCommand(context);
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showErrorMessage(`Failed to prepare srpls ${SRPLS_VERSION}: ${msg}`);
+		return;
+	}
 
 	const startPromises = (Object.entries(nosMap) as [NOSId, NOS][]).map(([id, nos]) => {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
@@ -67,7 +81,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('srSyntax.toggleFormat', async () => {
 			const editor = vscode.window.activeTextEditor;
-			if (!editor) return;
+			if (!editor) {
+				return;
+			}
 			await convertDocument(editor);
 		}),
 	);
@@ -163,4 +179,80 @@ async function convertDocument(editor: vscode.TextEditor) {
 
 export async function deactivate(): Promise<void> {
 	await Promise.all(Array.from(clients.values(), (client) => client.stop()));
+}
+
+function getSrplsBinarySpec(): SrplsBinarySpec | undefined {
+	if (process.platform !== 'linux') {
+		return undefined;
+	}
+
+	if (process.arch === 'x64') {
+		return {
+			assetName: 'srpls-linux-amd64',
+			targetName: `srpls-${SRPLS_VERSION}-linux-amd64`,
+		};
+	}
+
+	if (process.arch === 'arm64') {
+		return {
+			assetName: 'srpls-linux-arm64',
+			targetName: `srpls-${SRPLS_VERSION}-linux-arm64`,
+		};
+	}
+
+	return undefined;
+}
+
+async function resolveSrplsCommand(context: vscode.ExtensionContext): Promise<string> {
+	const spec = getSrplsBinarySpec();
+	if (spec) {
+		return ensureSrplsBinary(spec);
+	}
+
+	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
+	const localBin = context.asAbsolutePath(path.join('bin', bin));
+	if (fs.existsSync(localBin)) {
+		return localBin;
+	}
+
+	return bin;
+}
+
+async function ensureSrplsBinary(spec: SrplsBinarySpec): Promise<string> {
+	const srplsDir = path.join(os.homedir(), '.srpls');
+	const dstPath = path.join(srplsDir, spec.targetName);
+	fs.mkdirSync(srplsDir, { recursive: true });
+
+	if (fs.existsSync(dstPath)) {
+		await fs.promises.chmod(dstPath, 0o755);
+		return dstPath;
+	}
+
+	const url = `${SRPLS_RELEASE_BASE_URL}/${spec.assetName}`;
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: `Downloading srpls ${SRPLS_VERSION}…`,
+			cancellable: false,
+		},
+		async (progress) => {
+			const tmpPath = path.join(srplsDir, `${spec.targetName}.tmp-${process.pid}-${Date.now()}`);
+
+			progress.report({ message: `Fetching ${spec.assetName}…` });
+			await utils.downloadFile(url, tmpPath);
+			await fs.promises.chmod(tmpPath, 0o755);
+
+			progress.report({ message: 'Installing binary…' });
+			try {
+				await fs.promises.rename(tmpPath, dstPath);
+			} catch (e) {
+				if (!fs.existsSync(dstPath)) {
+					throw e;
+				}
+				try { await fs.promises.unlink(tmpPath); } catch { /* temporary file already removed */ }
+			}
+		}
+	);
+
+	return dstPath;
 }
