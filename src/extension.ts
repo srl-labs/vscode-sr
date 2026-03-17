@@ -12,7 +12,7 @@ import { srlinux } from './srlinux';
 import * as utils from './utils';
 
 let statusBar: vscode.StatusBarItem;
-const SRPLS_VERSION = 'v0.1.0';
+const SRPLS_VERSION = 'v0.1.1';
 const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
 
 interface SrplsBinarySpec {
