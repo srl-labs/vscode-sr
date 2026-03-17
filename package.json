@@ -60,22 +60,38 @@
 			{
 				"command": "srSyntax.restartServer",
 				"title": "SR Syntax: Restart Language Server"
+			},
+			{
+				"command": "srSyntax.toggleFormat",
+				"title": "Toggle Flat/Brace",
+				"icon": "$(arrow-swap)"
 			}
 		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "srSyntax.toggleFormat",
+					"when": "resourceLangId == srlinux",
+					"group": "navigation"
+				}
+			]
+		},
 		"configurationDefaults": {
 			"[sros]": {
 				"editor.quickSuggestions": {
 					"other": "inline",
 					"comments": "off",
 					"strings": "off"
-				}
+				},
+				"editor.semanticHighlighting.enabled": true
 			},
 			"[srlinux]": {
 				"editor.quickSuggestions": {
 					"other": "inline",
 					"comments": "off",
 					"strings": "off"
-				}
+				},
+				"editor.semanticHighlighting.enabled": true
 			}
 		}
 	},

@@ -9,6 +9,7 @@ export type NOSId = 'sros' | 'srlinux';
 export interface VersionDetectedParams {
 	uri: string;
 	version: string;
+	platform: string;
 }
 
 export interface ModelsNotFoundParams {
@@ -20,6 +21,7 @@ export interface ModelsNotFoundParams {
 export interface TrackedDocument {
 	nos: NOS;
 	version: string;
+	platform: string;
 }
 
 interface ModelEntry {

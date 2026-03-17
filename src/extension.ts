@@ -64,13 +64,18 @@ export async function activate(context: vscode.ExtensionContext) {
 			documents.clear();
 			await Promise.all(Array.from(clients.values(), (client) => client.restart()));
 			vscode.window.setStatusBarMessage('LSP servers restarted', 2000);
-		})
+		}),
+		vscode.commands.registerCommand('srSyntax.toggleFormat', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) return;
+			await convertDocument(editor);
+		}),
 	);
 }
 
 function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
 	client.onNotification('srpls/versionDetected', (params: VersionDetectedParams) => {
-		documents.set(params.uri, { nos, version: params.version });
+		documents.set(params.uri, { nos, version: params.version, platform: params.platform });
 		updateStatusBar();
 	});
 
@@ -101,9 +106,59 @@ function updateStatusBar() {
 		return;
 	}
 
-	statusBar.text = `${doc.nos.label} ${doc.version}`;
-	statusBar.tooltip = `${doc.nos.label} model version ${doc.version}`;
+	const platform = doc.platform ? ` (${doc.platform})` : '';
+	statusBar.text = `${doc.nos.label} ${doc.version}${platform}`;
+	statusBar.tooltip = `${doc.nos.label} model version ${doc.version}${platform}`;
 	statusBar.show();
+}
+
+/** Find the LSP client for the given document's language. */
+function getClientForDocument(doc: vscode.TextDocument): lsp.LanguageClient | undefined {
+	for (const [id, client] of clients) {
+		if (doc.languageId === id) {
+			return client;
+		}
+	}
+	return undefined;
+}
+
+/** Convert document between flat and brace format via the LSP server. */
+async function convertDocument(editor: vscode.TextEditor) {
+	const doc = editor.document;
+	const content = doc.getText();
+	const uri = doc.uri.toString();
+	const client = getClientForDocument(doc);
+
+	if (!client) {
+		vscode.window.showWarningMessage('No language server available for this document');
+		return;
+	}
+
+	let newContent: string;
+	try {
+		const result = await client.sendRequest('workspace/executeCommand', {
+			command: 'srpls.convert',
+			arguments: [uri, content],
+		});
+		if (typeof result !== 'string') {
+			vscode.window.showWarningMessage('Conversion failed: unexpected server response');
+			return;
+		}
+		newContent = result;
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showWarningMessage(`Conversion failed: ${msg}`);
+		return;
+	}
+
+	const fullRange = new vscode.Range(
+		doc.positionAt(0),
+		doc.positionAt(content.length),
+	);
+
+	await editor.edit(editBuilder => {
+		editBuilder.replace(fullRange, newContent);
+	});
 }
 
 export async function deactivate(): Promise<void> {
