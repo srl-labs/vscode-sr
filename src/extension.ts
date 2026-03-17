@@ -203,33 +203,42 @@ export async function deactivate(): Promise<void> {
 }
 
 function getSrplsBinarySpec(): SrplsBinarySpec | undefined {
-	if (process.platform !== 'linux') {
-		return undefined;
+	let platformName: string | undefined;
+	switch (process.platform) {
+		case 'linux':
+			platformName = 'linux';
+			break;
+		case 'darwin':
+			platformName = 'darwin';
+			break;
+		case 'win32':
+			platformName = 'windows';
+			break;
+		default:
+			return undefined;
 	}
 
-	if (process.arch === 'x64') {
-		return {
-			assetName: 'srpls-linux-amd64',
-			targetName: `srpls-${SRPLS_VERSION}-linux-amd64`,
-		};
+	let archName: string | undefined;
+	switch (process.arch) {
+		case 'x64':
+			archName = 'amd64';
+			break;
+		case 'arm64':
+			archName = 'arm64';
+			break;
+		default:
+			return undefined;
 	}
 
-	if (process.arch === 'arm64') {
-		return {
-			assetName: 'srpls-linux-arm64',
-			targetName: `srpls-${SRPLS_VERSION}-linux-arm64`,
-		};
-	}
-
-	return undefined;
+	const extension = platformName === 'windows' ? '.exe' : '';
+	const binaryName = `srpls-${platformName}-${archName}${extension}`;
+	return {
+		assetName: binaryName,
+		targetName: `srpls-${SRPLS_VERSION}-${platformName}-${archName}${extension}`,
+	};
 }
 
-async function resolveSrplsCommand(context: vscode.ExtensionContext): Promise<string> {
-	const spec = getSrplsBinarySpec();
-	if (spec) {
-		return ensureSrplsBinary(spec);
-	}
-
+function resolveFallbackSrplsCommand(context: vscode.ExtensionContext): string {
 	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
 	const localBin = context.asAbsolutePath(path.join('bin', bin));
 	if (fs.existsSync(localBin)) {
@@ -239,13 +248,37 @@ async function resolveSrplsCommand(context: vscode.ExtensionContext): Promise<st
 	return bin;
 }
 
+async function resolveSrplsCommand(context: vscode.ExtensionContext): Promise<string> {
+	const fallbackCommand = resolveFallbackSrplsCommand(context);
+	const spec = getSrplsBinarySpec();
+	if (!spec) {
+		return fallbackCommand;
+	}
+
+	try {
+		return await ensureSrplsBinary(spec);
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showWarningMessage(`Failed to download ${spec.assetName}: ${msg}. Falling back to ${fallbackCommand}.`);
+		return fallbackCommand;
+	}
+}
+
+async function ensureExecutableIfNeeded(filePath: string): Promise<void> {
+	if (process.platform === 'win32') {
+		return;
+	}
+
+	await fs.promises.chmod(filePath, 0o755);
+}
+
 async function ensureSrplsBinary(spec: SrplsBinarySpec): Promise<string> {
 	const srplsDir = path.join(os.homedir(), '.srpls');
 	const dstPath = path.join(srplsDir, spec.targetName);
 	fs.mkdirSync(srplsDir, { recursive: true });
 
 	if (fs.existsSync(dstPath)) {
-		await fs.promises.chmod(dstPath, 0o755);
+		await ensureExecutableIfNeeded(dstPath);
 		return dstPath;
 	}
 
@@ -261,7 +294,7 @@ async function ensureSrplsBinary(spec: SrplsBinarySpec): Promise<string> {
 
 			progress.report({ message: `Fetching ${spec.assetName}…` });
 			await utils.downloadFile(url, tmpPath);
-			await fs.promises.chmod(tmpPath, 0o755);
+			await ensureExecutableIfNeeded(tmpPath);
 
 			progress.report({ message: 'Installing binary…' });
 			try {
