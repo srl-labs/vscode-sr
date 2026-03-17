@@ -1,22 +1,14 @@
-# vscode-sr
+# VSCode SR
 
-VS Code extension for Nokia SR OS and SR Linux configuration files.
+A VS Code language extesion for Nokia SR OS and SR Linux configuration files which uses the [srpls](https://github.com/srl-labs/srpls) language server.
 
 ## Features
 
 - Syntax highlighting for:
   - `*.sros.cfg`
   - `*.srl.cfg`
-- Language Server Protocol (LSP) support via `srpls`
-- Toggle Flat/Brace command for SR Linux configs
-- Auto-suggestions triggered on space and Enter in SR config contexts
-
-## srpls Binary
-
-On startup, the extension downloads the pinned `srpls` release binary into:
-
-- `~/.srpls/` (Linux/macOS)
-- `%USERPROFILE%\\.srpls\\` (Windows)
+- Flatten/unflatten conifg on-demand for SR Linux
+- Automatic configuration keyword suggestions based on the YANG model.
 
 ## Quickstart
 
@@ -31,6 +23,14 @@ On startup, the extension downloads the pinned `srpls` release binary into:
 
 3. Save and start typing config. Suggestions should appear automatically.
 
+## FAQ
+
+### Q: Where is the srpls binary installed?
+
+The `srpls` language server binary is by default installed into the following locations (dependant on OS):
+
+- `~/.srpls` (Linux & MacOS)
+- `%USERPROFILE%\.srpls` (Windows)
 
 ## Development
 
