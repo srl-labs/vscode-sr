@@ -15,10 +15,8 @@ let statusBar: vscode.StatusBarItem;
 const SRPLS_VERSION = 'v0.1.1';
 const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
 
-interface SrplsBinarySpec {
-	assetName: string;
-	targetName: string;
-}
+const PLATFORMS: Record<string, string> = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
+const ARCHS: Record<string, string> = { x64: 'amd64', arm64: 'arm64' };
 
 const nosMap: Record<NOSId, NOS> = {
 	sros,
@@ -59,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	let cmd: string;
 	try {
-		cmd = await resolveSrplsCommand(context);
+		cmd = await getOrDownloadSrpls();
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : String(e);
 		vscode.window.showErrorMessage(`Failed to prepare srpls ${SRPLS_VERSION}: ${msg}`);
@@ -202,113 +200,39 @@ export async function deactivate(): Promise<void> {
 	await Promise.all(Array.from(clients.values(), (client) => client.stop()));
 }
 
-function getSrplsBinarySpec(): SrplsBinarySpec | undefined {
-	let platformName: string | undefined;
-	switch (process.platform) {
-		case 'linux':
-			platformName = 'linux';
-			break;
-		case 'darwin':
-			platformName = 'darwin';
-			break;
-		case 'win32':
-			platformName = 'windows';
-			break;
-		default:
-			return undefined;
+async function getOrDownloadSrpls(): Promise<string> {
+	const plat = PLATFORMS[process.platform];
+	const arch = ARCHS[process.arch];
+	if (!plat || !arch) {
+		throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
 	}
 
-	let archName: string | undefined;
-	switch (process.arch) {
-		case 'x64':
-			archName = 'amd64';
-			break;
-		case 'arm64':
-			archName = 'arm64';
-			break;
-		default:
-			return undefined;
-	}
-
-	const extension = platformName === 'windows' ? '.exe' : '';
-	const binaryName = `srpls-${platformName}-${archName}${extension}`;
-	return {
-		assetName: binaryName,
-		targetName: `srpls-${SRPLS_VERSION}-${platformName}-${archName}${extension}`,
-	};
-}
-
-function resolveFallbackSrplsCommand(context: vscode.ExtensionContext): string {
-	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
-	const localBin = context.asAbsolutePath(path.join('bin', bin));
-	if (fs.existsSync(localBin)) {
-		return localBin;
-	}
-
-	return bin;
-}
-
-async function resolveSrplsCommand(context: vscode.ExtensionContext): Promise<string> {
-	const fallbackCommand = resolveFallbackSrplsCommand(context);
-	const spec = getSrplsBinarySpec();
-	if (!spec) {
-		return fallbackCommand;
-	}
-
-	try {
-		return await ensureSrplsBinary(spec);
-	} catch (e: unknown) {
-		const msg = e instanceof Error ? e.message : String(e);
-		vscode.window.showWarningMessage(`Failed to download ${spec.assetName}: ${msg}. Falling back to ${fallbackCommand}.`);
-		return fallbackCommand;
-	}
-}
-
-async function ensureExecutableIfNeeded(filePath: string): Promise<void> {
-	if (process.platform === 'win32') {
-		return;
-	}
-
-	await fs.promises.chmod(filePath, 0o755);
-}
-
-async function ensureSrplsBinary(spec: SrplsBinarySpec): Promise<string> {
+	const ext = process.platform === 'win32' ? '.exe' : '';
 	const srplsDir = path.join(os.homedir(), '.srpls');
-	const dstPath = path.join(srplsDir, spec.targetName);
-	fs.mkdirSync(srplsDir, { recursive: true });
+	const binPath = path.join(srplsDir, `srpls-${SRPLS_VERSION}-${plat}-${arch}${ext}`);
 
-	if (fs.existsSync(dstPath)) {
-		await ensureExecutableIfNeeded(dstPath);
-		return dstPath;
+	if (!fs.existsSync(binPath)) {
+		await installSrpls(binPath, `srpls-${plat}-${arch}${ext}`);
 	}
 
-	const url = `${SRPLS_RELEASE_BASE_URL}/${spec.assetName}`;
+	return binPath;
+}
+
+async function installSrpls(binPath: string, asset: string): Promise<void> {
+	const dir = path.dirname(binPath);
+	fs.mkdirSync(dir, { recursive: true });
+
 	await vscode.window.withProgress(
-		{
-			location: vscode.ProgressLocation.Notification,
-			title: `Downloading srpls ${SRPLS_VERSION}…`,
-			cancellable: false,
-		},
-		async (progress) => {
-			const tmpPath = path.join(srplsDir, `${spec.targetName}.tmp-${process.pid}-${Date.now()}`);
-
-			progress.report({ message: `Fetching ${spec.assetName}…` });
-			await utils.downloadFile(url, tmpPath);
-			await ensureExecutableIfNeeded(tmpPath);
-
-			progress.report({ message: 'Installing binary…' });
-			try {
-				await fs.promises.rename(tmpPath, dstPath);
-			} catch (e) {
-				if (!fs.existsSync(dstPath)) {
-					throw e;
-				}
-				try { await fs.promises.unlink(tmpPath); } catch { /* temporary file already removed */ }
+		{ location: vscode.ProgressLocation.Notification, title: `Downloading srpls ${SRPLS_VERSION}…` },
+		async () => {
+			const tmpPath = `${binPath}.tmp-${process.pid}`;
+			await utils.downloadFile(`${SRPLS_RELEASE_BASE_URL}/${asset}`, tmpPath);
+			if (process.platform !== 'win32') {
+				await fs.promises.chmod(tmpPath, 0o755);
 			}
+			await fs.promises.rename(tmpPath, binPath);
 		}
 	);
-
-	return dstPath;
 }
 
 function shouldTriggerSuggestForChange(change: vscode.TextDocumentContentChangeEvent): boolean {
