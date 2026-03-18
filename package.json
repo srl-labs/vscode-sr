@@ -93,7 +93,7 @@
 			"editor/title": [
 				{
 					"command": "srSyntax.toggleFormat",
-					"when": "resourceLangId == srlinux",
+					"when": "resourceLangId == srlinux || resourceLangId == sros",
 					"group": "navigation"
 				}
 			]
