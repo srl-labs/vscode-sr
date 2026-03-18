@@ -60,6 +60,10 @@
 		],
 		"commands": [
 			{
+				"command": "srSyntax.newConfig",
+				"title": "SR Syntax: New SR Config"
+			},
+			{
 				"command": "srSyntax.restartServer",
 				"title": "SR Syntax: Restart Language Server"
 			},
@@ -79,6 +83,10 @@
 			{
 				"command": "srSyntax.selectPlatform",
 				"title": "SR Syntax: Select Platform"
+			},
+			{
+				"command": "srSyntax.fixPlatformHeader",
+				"title": "SR Syntax: Fix Platform Header"
 			}
 		],
 		"menus": {
