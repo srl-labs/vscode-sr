@@ -19,6 +19,7 @@
 	},
 	"activationEvents": [],
 	"main": "./out/extension",
+	"icon": "assets/logo.png",
 	"contributes": {
 		"languages": [
 			{
