@@ -1,7 +1,8 @@
 {
 	"name": "sr-vscode",
+	"displayName": "SR Linux & SR OS Language Server",
 	"publisher": "srl-labs",
-	"description": "VS Code Language extension for Nokia SR OS and SR Linux",
+	"description": "VS Code Language Server for Nokia SR Linux and SR OS",
 	"author": "SRL Labs",
 	"license": "GPL-2.0-only",
 	"version": "0.1.0",
@@ -77,27 +78,27 @@
 				}
 			]
 		},
-			"configurationDefaults": {
-				"[sros]": {
-					"editor.quickSuggestions": {
-						"other": "on",
-						"comments": "off",
-						"strings": "off"
-					},
-					"editor.suggestOnTriggerCharacters": true,
-					"editor.semanticHighlighting.enabled": true
+		"configurationDefaults": {
+			"[sros]": {
+				"editor.quickSuggestions": {
+					"other": "on",
+					"comments": "off",
+					"strings": "off"
 				},
-				"[srlinux]": {
-					"editor.quickSuggestions": {
-						"other": "on",
-						"comments": "off",
-						"strings": "off"
-					},
-					"editor.suggestOnTriggerCharacters": true,
-					"editor.semanticHighlighting.enabled": true
-				}
+				"editor.suggestOnTriggerCharacters": true,
+				"editor.semanticHighlighting.enabled": true
+			},
+			"[srlinux]": {
+				"editor.quickSuggestions": {
+					"other": "on",
+					"comments": "off",
+					"strings": "off"
+				},
+				"editor.suggestOnTriggerCharacters": true,
+				"editor.semanticHighlighting.enabled": true
 			}
-		},
+		}
+	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -b",
