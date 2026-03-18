@@ -67,6 +67,18 @@
 				"command": "srSyntax.toggleFormat",
 				"title": "Toggle Flat/Brace",
 				"icon": "$(arrow-swap)"
+			},
+			{
+				"command": "srSyntax.selectStatusField",
+				"title": "SR Syntax: Select Version/Platform"
+			},
+			{
+				"command": "srSyntax.selectVersion",
+				"title": "SR Syntax: Select Model Version"
+			},
+			{
+				"command": "srSyntax.selectPlatform",
+				"title": "SR Syntax: Select Platform"
 			}
 		],
 		"menus": {
