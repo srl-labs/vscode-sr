@@ -2,7 +2,7 @@
 	"name": "sr-vscode",
 	"displayName": "SR Linux & SR OS Language Server",
 	"publisher": "srl-labs",
-	"description": "VS Code Language Server for Nokia SR Linux and SR OS",
+	"description": "VS Code language server extension for Nokia SR Linux and SR OS",
 	"author": "SRL Labs",
 	"license": "GPL-2.0-only",
 	"version": "0.1.0",

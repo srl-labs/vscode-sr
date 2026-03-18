@@ -1,6 +1,6 @@
-# VSCode SR
+# Nokia SR Linux & SR OS Language Server
 
-A VS Code language extesion for Nokia SR OS and SR Linux configuration files which uses the [srpls](https://github.com/srl-labs/srpls) language server.
+A VS Code language server extension for Nokia SR OS and SR Linux configuration files which uses the [srpls](https://github.com/srl-labs/srpls) language server.
 
 ## Features
 
