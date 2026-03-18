@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import * as lsp from 'vscode-languageclient/node';
 import {
@@ -8,8 +9,14 @@ import {
 } from './nos';
 import { sros } from './sros';
 import { srlinux } from './srlinux';
+import * as utils from './utils';
 
 let statusBar: vscode.StatusBarItem;
+const SRPLS_VERSION = 'v0.1.1';
+const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
+
+const PLATFORMS: Record<string, string> = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
+const ARCHS: Record<string, string> = { x64: 'amd64', arm64: 'arm64' };
 
 const nosMap: Record<NOSId, NOS> = {
 	sros,
@@ -26,10 +33,36 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => updateStatusBar())
 	);
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeTextDocument((event) => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor || editor.document.uri.toString() !== event.document.uri.toString()) {
+				return;
+			}
 
-	const bin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
-	const localBin = context.asAbsolutePath(path.join('bin', bin));
-	const cmd = fs.existsSync(localBin) ? localBin : bin;
+			if (!(editor.document.languageId in nosMap)) {
+				return;
+			}
+
+			const shouldTriggerSuggest = event.contentChanges.some(shouldTriggerSuggestForChange);
+			if (!shouldTriggerSuggest) {
+				return;
+			}
+
+			setTimeout(() => {
+				void vscode.commands.executeCommand('editor.action.triggerSuggest');
+			}, 0);
+		})
+	);
+
+	let cmd: string;
+	try {
+		cmd = await getOrDownloadSrpls();
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showErrorMessage(`Failed to prepare srpls ${SRPLS_VERSION}: ${msg}`);
+		return;
+	}
 
 	const startPromises = (Object.entries(nosMap) as [NOSId, NOS][]).map(([id, nos]) => {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
@@ -67,7 +100,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('srSyntax.toggleFormat', async () => {
 			const editor = vscode.window.activeTextEditor;
-			if (!editor) return;
+			if (!editor) {
+				return;
+			}
 			await convertDocument(editor);
 		}),
 	);
@@ -163,4 +198,71 @@ async function convertDocument(editor: vscode.TextEditor) {
 
 export async function deactivate(): Promise<void> {
 	await Promise.all(Array.from(clients.values(), (client) => client.stop()));
+}
+
+async function getOrDownloadSrpls(): Promise<string> {
+	const plat = PLATFORMS[process.platform];
+	const arch = ARCHS[process.arch];
+	if (!plat || !arch) {
+		throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
+	}
+
+	const ext = process.platform === 'win32' ? '.exe' : '';
+	const srplsDir = path.join(os.homedir(), '.srpls');
+	const binPath = path.join(srplsDir, `srpls-${SRPLS_VERSION}-${plat}-${arch}${ext}`);
+
+	if (!fs.existsSync(binPath)) {
+		await installSrpls(binPath, `srpls-${plat}-${arch}${ext}`);
+	}
+
+	return binPath;
+}
+
+async function installSrpls(binPath: string, asset: string): Promise<void> {
+	const dir = path.dirname(binPath);
+	fs.mkdirSync(dir, { recursive: true });
+
+	await vscode.window.withProgress(
+		{ location: vscode.ProgressLocation.Notification, title: `Downloading srpls ${SRPLS_VERSION}…` },
+		async () => {
+			const tmpPath = `${binPath}.tmp-${process.pid}`;
+			await utils.downloadFile(`${SRPLS_RELEASE_BASE_URL}/${asset}`, tmpPath);
+			if (process.platform !== 'win32') {
+				await fs.promises.chmod(tmpPath, 0o755);
+			}
+			await fs.promises.rename(tmpPath, binPath);
+		}
+	);
+}
+
+function shouldTriggerSuggestForChange(change: vscode.TextDocumentContentChangeEvent): boolean {
+	if (!change.text) {
+		return false;
+	}
+
+	if (change.text.includes('\r')) {
+		return false;
+	}
+
+	if (change.text.endsWith(' ')) {
+		return true;
+	}
+
+	// Enter in an indented block typically inserts a single newline plus spaces/tabs.
+	// Trigger suggestions for that case but avoid noisy triggers for multi-line paste.
+	if (change.text.includes('\n')) {
+		if (change.rangeLength !== 0) {
+			return false;
+		}
+
+		const newlineCount = change.text.split('\n').length - 1;
+		if (newlineCount !== 1) {
+			return false;
+		}
+
+		const nonWhitespace = change.text.replace(/\n/g, '').replace(/[ \t]/g, '');
+		return nonWhitespace.length === 0;
+	}
+
+	return false;
 }
