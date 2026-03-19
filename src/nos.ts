@@ -10,6 +10,7 @@ export interface VersionDetectedParams {
 	uri: string;
 	version: string;
 	platform: string;
+	modelsLoaded: boolean;
 }
 
 export interface ModelsNotFoundParams {
@@ -22,6 +23,7 @@ export interface TrackedDocument {
 	nos: NOS;
 	version: string;
 	platform: string;
+	modelsLoaded: boolean;
 }
 
 interface ModelEntry {
@@ -31,6 +33,7 @@ interface ModelEntry {
 
 export class NOS {
 	public readonly yangDir: string;
+	public platforms: string[] = [];
 	private versionMap: Record<string, string> | undefined;
 	private downloading = new Set<string>();
 

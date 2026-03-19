@@ -60,6 +60,10 @@
 		],
 		"commands": [
 			{
+				"command": "srSyntax.newConfig",
+				"title": "SR Syntax: New SR Config"
+			},
+			{
 				"command": "srSyntax.restartServer",
 				"title": "SR Syntax: Restart Language Server"
 			},
@@ -67,13 +71,21 @@
 				"command": "srSyntax.toggleFormat",
 				"title": "Toggle Flat/Brace",
 				"icon": "$(arrow-swap)"
+			},
+			{
+				"command": "srSyntax.selectVersion",
+				"title": "SR Syntax: Select Model Version"
+			},
+			{
+				"command": "srSyntax.selectPlatform",
+				"title": "SR Syntax: Select Platform"
 			}
 		],
 		"menus": {
 			"editor/title": [
 				{
 					"command": "srSyntax.toggleFormat",
-					"when": "resourceLangId == srlinux",
+					"when": "resourceLangId == srlinux || resourceLangId == sros",
 					"group": "navigation"
 				}
 			]
@@ -110,6 +122,7 @@
 	},
 	"dependencies": {
 		"glob": "^11.0.0",
+		"semver": "^7.7.4",
 		"tar": "^7.5.9",
 		"vscode-languageclient": "^9.0.1"
 	},
@@ -118,6 +131,7 @@
 		"@stylistic/eslint-plugin": "^2.9.0",
 		"@types/mocha": "^10.0.6",
 		"@types/node": "^22",
+		"@types/semver": "^7.7.1",
 		"@types/vscode": "^1.100.0",
 		"@vscode/test-electron": "^2.3.9",
 		"eslint": "^9.13.0",

@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+bin/
 
 .DS_Store
 .vscode/
