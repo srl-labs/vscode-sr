@@ -57,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	let cmd: string;
 	try {
-		cmd = await getOrDownloadSrpls();
+		cmd = await getOrDownloadSrpls(context.extensionPath);
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : String(e);
 		vscode.window.showErrorMessage(`Failed to prepare srpls ${SRPLS_VERSION}: ${msg}`);
@@ -200,14 +200,20 @@ export async function deactivate(): Promise<void> {
 	await Promise.all(Array.from(clients.values(), (client) => client.stop()));
 }
 
-async function getOrDownloadSrpls(): Promise<string> {
+async function getOrDownloadSrpls(extensionPath: string): Promise<string> {
+	const ext = process.platform === 'win32' ? '.exe' : '';
+
+	const localBin = path.join(extensionPath, 'bin', `srpls${ext}`);
+	if (fs.existsSync(localBin)) {
+		return localBin;
+	}
+
 	const plat = PLATFORMS[process.platform];
 	const arch = ARCHS[process.arch];
 	if (!plat || !arch) {
 		throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
 	}
 
-	const ext = process.platform === 'win32' ? '.exe' : '';
 	const srplsDir = path.join(os.homedir(), '.srpls');
 	const binPath = path.join(srplsDir, `srpls-${SRPLS_VERSION}-${plat}-${arch}${ext}`);
 
