@@ -9,45 +9,17 @@ import {
 } from './nos';
 import { sros } from './sros';
 import { srlinux } from './srlinux';
+import * as semver from 'semver';
 import * as utils from './utils';
 
-let statusBar: vscode.StatusBarItem;
 const SRPLS_VERSION = 'v0.1.1';
 const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
 
+let versionStatusBar: vscode.StatusBarItem;
+let platformStatusBar: vscode.StatusBarItem;
+
 const PLATFORMS: Record<string, string> = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
 const ARCHS: Record<string, string> = { x64: 'amd64', arm64: 'arm64' };
-const SRLINUX_KNOWN_PLATFORMS = [
-	'7215-IXS-A1',
-	'7220-IXR-D1',
-	'7220-IXR-D2L',
-	'7220-IXR-D3L',
-	'7220-IXR-D4',
-	'7220-IXR-D5',
-	'7220-IXR-H2',
-	'7220-IXR-H3',
-	'7220-IXR-H4',
-	'7220-IXR-H4-32D',
-	'7220-IXR-H5-32D',
-	'7220-IXR-H5-64D',
-	'7220-IXR-H5-64O',
-	'7250-IXR-10e',
-	'7250-IXR-18e',
-	'7250-IXR-6e',
-	'7250-IXR-X1b',
-	'7250-IXR-X3b',
-	'7730-SXR-1d-32d',
-	'7730-SXR-1x-44s',
-];
-const VERSION_DIRECTIVE_RE = /^\s*(?:#|\/\/|!)?\s*version\s*=\s*\d+\.\d+\s*$/i;
-const PLATFORM_DIRECTIVE_RE = /^\s*(?:#|\/\/|!)\s*platform\s*=\s*\S+\s*$/i;
-const PLATFORM_DIRECTIVE_CAPTURE_RE = /^\s*(?:#|\/\/|!)\s*platform\s*=\s*(\S+)\s*$/i;
-const SROS_FORMAT_VERSION_RE = /Configuration format version \d+\.\d+/i;
-const PLATFORM_HEADER_SCAN_LINES = 5;
-const PLATFORM_HEADER_DIAGNOSTIC_CODE = 'srSyntax.platformHeader';
-const CUSTOM_PLATFORM_PICK = 'Custom...';
-const SRLINUX_DEFAULT_PLATFORM = SRLINUX_KNOWN_PLATFORMS[0];
-const SROS_PLATFORM_SKELETON = '...';
 
 const nosMap: Record<NOSId, NOS> = {
 	sros,
@@ -56,27 +28,19 @@ const nosMap: Record<NOSId, NOS> = {
 
 const clients = new Map<NOSId, lsp.LanguageClient>();
 const documents = new Map<string, TrackedDocument>();
-let headerHealthDiagnostics: vscode.DiagnosticCollection;
 
 export async function activate(context: vscode.ExtensionContext) {
-	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	statusBar.command = 'srSyntax.selectStatusField';
-	headerHealthDiagnostics = vscode.languages.createDiagnosticCollection('srSyntaxHeader');
-	context.subscriptions.push(statusBar, headerHealthDiagnostics);
+	versionStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 501);
+	versionStatusBar.command = 'srSyntax.selectVersion';
+	platformStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 500);
+	platformStatusBar.command = 'srSyntax.selectPlatform';
+	context.subscriptions.push(versionStatusBar, platformStatusBar);
 
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => updateStatusBar())
 	);
 	context.subscriptions.push(
-		vscode.workspace.onDidOpenTextDocument((document) => {
-			updateHeaderHealthForDocument(document);
-		}),
-		vscode.workspace.onDidCloseTextDocument((document) => {
-			headerHealthDiagnostics.delete(document.uri);
-		}),
 		vscode.workspace.onDidChangeTextDocument((event) => {
-			updateHeaderHealthForDocument(event.document);
-
 			const editor = vscode.window.activeTextEditor;
 			if (!editor || editor.document.uri.toString() !== event.document.uri.toString()) {
 				return;
@@ -96,9 +60,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			}, 0);
 		})
 	);
-	for (const doc of vscode.workspace.textDocuments) {
-		updateHeaderHealthForDocument(doc);
-	}
 
 	let cmd: string;
 	try {
@@ -137,6 +98,25 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 	await Promise.all(startPromises);
 
+	// Fetch known platforms from each server
+	for (const [id, nos] of Object.entries(nosMap) as [NOSId, NOS][]) {
+		const client = clients.get(id);
+		if (!client) {
+			continue;
+		}
+		try {
+			const result = await client.sendRequest('workspace/executeCommand', {
+				command: 'srpls.knownPlatforms',
+				arguments: [],
+			});
+			if (Array.isArray(result)) {
+				nos.platforms = result as string[];
+			}
+		} catch {
+			// Server may not support knownPlatforms (e.g. SR OS) — leave empty
+		}
+	}
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('srSyntax.newConfig', async () => {
 			await createNewSRConfig();
@@ -154,63 +134,19 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			await convertDocument(editor);
 		}),
-		vscode.commands.registerCommand('srSyntax.selectStatusField', async () => {
-			await selectStatusFieldForActiveDocument();
-		}),
 		vscode.commands.registerCommand('srSyntax.selectVersion', async () => {
 			await selectVersionForActiveDocument();
 		}),
 		vscode.commands.registerCommand('srSyntax.selectPlatform', async () => {
 			await selectPlatformForActiveDocument();
 		}),
-		vscode.commands.registerCommand('srSyntax.fixPlatformHeader', async (uri?: vscode.Uri) => {
-			await fixPlatformHeader(uri);
-		}),
-	);
-
-	context.subscriptions.push(
-		vscode.languages.registerCodeActionsProvider(
-			[
-				{ language: 'srlinux', scheme: 'file' },
-				{ language: 'sros', scheme: 'file' },
-				{ language: 'srlinux', scheme: 'untitled' },
-				{ language: 'sros', scheme: 'untitled' },
-			],
-			{
-				provideCodeActions(document, _range, actionContext) {
-					const actions: vscode.CodeAction[] = [];
-					for (const diagnostic of actionContext.diagnostics) {
-						if (diagnostic.code !== PLATFORM_HEADER_DIAGNOSTIC_CODE) {
-							continue;
-						}
-
-						const action = new vscode.CodeAction(
-							'Fix platform header',
-							vscode.CodeActionKind.QuickFix
-						);
-						action.command = {
-							title: 'Fix platform header',
-							command: 'srSyntax.fixPlatformHeader',
-							arguments: [document.uri],
-						};
-						action.diagnostics = [diagnostic];
-						action.isPreferred = true;
-						actions.push(action);
-					}
-					return actions;
-				},
-			},
-			{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
-		)
 	);
 }
 
 function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
 	client.onNotification('srpls/versionDetected', (params: VersionDetectedParams) => {
-		const existing = documents.get(params.uri);
-		const fallbackPlatform = extractPlatformFromOpenDocument(params.uri);
-		const platform = params.platform || fallbackPlatform || existing?.platform || '';
-		documents.set(params.uri, { nos, version: params.version, platform });
+		const platform = params.platform || '';
+		documents.set(params.uri, { nos, version: params.version, platform, modelsLoaded: params.modelsLoaded });
 		updateStatusBar();
 	});
 
@@ -231,20 +167,32 @@ function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
 function updateStatusBar() {
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
-		statusBar.hide();
+		versionStatusBar.hide();
+		platformStatusBar.hide();
 		return;
 	}
 
 	const doc = documents.get(editor.document.uri.toString());
 	if (!doc) {
-		statusBar.hide();
+		versionStatusBar.hide();
+		platformStatusBar.hide();
 		return;
 	}
 
+	const dot = doc.modelsLoaded ? '$(pass-filled)' : '$(circle-large-outline)';
+	versionStatusBar.text = `$(tag) ${doc.nos.label} ${doc.version} ${dot}`;
+	versionStatusBar.tooltip = doc.modelsLoaded
+		? `${doc.version} YANG models loaded`
+		: `${doc.version} YANG models not loaded`;
+	versionStatusBar.backgroundColor = doc.modelsLoaded
+		? undefined
+		: new vscode.ThemeColor('statusBarItem.warningBackground');
+	versionStatusBar.show();
+
 	const platform = doc.platform || 'unset';
-	statusBar.text = `${doc.nos.label} $(versions) ${doc.version} $(device-desktop) ${platform}`;
-	statusBar.tooltip = `${doc.nos.label} model version ${doc.version}\nPlatform ${platform}\nClick to select version or platform`;
-	statusBar.show();
+	platformStatusBar.text = `$(server) ${platform}`;
+	platformStatusBar.tooltip = `Click to select platform`;
+	platformStatusBar.show();
 }
 
 async function createNewSRConfig() {
@@ -289,14 +237,13 @@ async function createNewSRConfig() {
 	await vscode.workspace.fs.writeFile(targetUri, new TextEncoder().encode(content));
 	const document = await vscode.workspace.openTextDocument(targetUri);
 	await vscode.window.showTextDocument(document);
-	updateHeaderHealthForDocument(document);
 }
 
 function configTemplateFor(nos: NOSId): string {
-	if (nos === 'srlinux') {
-		return `# version=${srlinux.latestVersion()}\n# platform=${SRLINUX_DEFAULT_PLATFORM}\n\n`;
-	}
-	return `# Configuration format version ${sros.latestVersion()}\n# platform=${SROS_PLATFORM_SKELETON}\n\n`;
+	const nosObj = nosMap[nos];
+	const defaultPlatform = nosObj.platforms[0] || '...';
+	const version = nosObj.latestVersion();
+	return `# version=${version} platform=${defaultPlatform}\n\n`;
 }
 
 function ensureUriSuffix(uri: vscode.Uri, suffix: string): vscode.Uri {
@@ -313,138 +260,6 @@ async function uriExists(uri: vscode.Uri): Promise<boolean> {
 	} catch {
 		return false;
 	}
-}
-
-async function fixPlatformHeader(uri?: vscode.Uri) {
-	const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-	if (!targetUri) {
-		return;
-	}
-
-	let document = vscode.workspace.textDocuments.find(
-		(doc) => doc.uri.toString() === targetUri.toString()
-	);
-	if (!document) {
-		document = await vscode.workspace.openTextDocument(targetUri);
-	}
-
-	if (!isNOSLanguageId(document.languageId)) {
-		return;
-	}
-
-	const content = document.getText();
-	const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
-	const nextContent = withPlatformDirective(content, defaultPlatformFor(document.languageId), eol);
-	if (nextContent === content) {
-		return;
-	}
-
-	const fullRange = new vscode.Range(
-		document.positionAt(0),
-		document.positionAt(content.length),
-	);
-	const edit = new vscode.WorkspaceEdit();
-	edit.replace(document.uri, fullRange, nextContent);
-	if (!await vscode.workspace.applyEdit(edit)) {
-		return;
-	}
-
-	const refreshedDoc = vscode.workspace.textDocuments.find(
-		(doc) => doc.uri.toString() === document.uri.toString()
-	) ?? document;
-	updateHeaderHealthForDocument(refreshedDoc);
-}
-
-function defaultPlatformFor(nos: NOSId): string {
-	return nos === 'srlinux' ? SRLINUX_DEFAULT_PLATFORM : SROS_PLATFORM_SKELETON;
-}
-
-function isNOSLanguageId(languageId: string): languageId is NOSId {
-	return languageId === 'srlinux' || languageId === 'sros';
-}
-
-function updateHeaderHealthForDocument(document: vscode.TextDocument) {
-	if (!isNOSLanguageId(document.languageId)) {
-		headerHealthDiagnostics.delete(document.uri);
-		return;
-	}
-
-	const issue = platformHeaderIssue(document);
-	if (!issue) {
-		headerHealthDiagnostics.delete(document.uri);
-		return;
-	}
-
-	const lineIndex = Math.min(issue.line, Math.max(document.lineCount - 1, 0));
-	const lineText = document.lineAt(lineIndex).text;
-	const range = new vscode.Range(lineIndex, 0, lineIndex, Math.max(lineText.length, 1));
-	const diagnostic = new vscode.Diagnostic(range, issue.message, vscode.DiagnosticSeverity.Warning);
-	diagnostic.code = PLATFORM_HEADER_DIAGNOSTIC_CODE;
-	diagnostic.source = 'sr-vscode';
-	headerHealthDiagnostics.set(document.uri, [diagnostic]);
-}
-
-function platformHeaderIssue(document: vscode.TextDocument): { line: number; message: string } | undefined {
-	const scanLimit = Math.min(PLATFORM_HEADER_SCAN_LINES, document.lineCount);
-	let likelyLine = -1;
-
-	for (let i = 0; i < scanLimit; i++) {
-		const line = document.lineAt(i).text;
-		if (PLATFORM_DIRECTIVE_CAPTURE_RE.test(line)) {
-			return undefined;
-		}
-		if (line.toLowerCase().includes('platform')) {
-			likelyLine = i;
-		}
-	}
-
-	if (likelyLine >= 0) {
-		return {
-			line: likelyLine,
-			message: `Invalid platform header. Use '# platform=<value>' within first ${PLATFORM_HEADER_SCAN_LINES} lines.`,
-		};
-	}
-
-	return {
-		line: 0,
-		message: `Missing platform header. Add '# platform=<value>' within first ${PLATFORM_HEADER_SCAN_LINES} lines.`,
-	};
-}
-
-async function selectStatusFieldForActiveDocument() {
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		return;
-	}
-
-	const uri = editor.document.uri.toString();
-	const tracked = documents.get(uri);
-	if (!tracked) {
-		vscode.window.showInformationMessage('Version/platform is not detected yet for this document.');
-		return;
-	}
-
-	const platform = tracked.platform || 'unset';
-	const picked = await vscode.window.showQuickPick(
-		[
-			{ label: 'Version', description: tracked.version, detail: 'Select model version' },
-			{ label: 'Platform', description: platform, detail: 'Select platform' },
-		],
-		{
-			title: `${tracked.nos.label}: Select field`,
-			placeHolder: 'Choose what to change',
-		}
-	);
-	if (!picked) {
-		return;
-	}
-
-	if (picked.label === 'Version') {
-		await selectVersionForActiveDocument();
-		return;
-	}
-
-	await selectPlatformForActiveDocument();
 }
 
 async function selectVersionForActiveDocument() {
@@ -469,7 +284,7 @@ async function selectVersionForActiveDocument() {
 	const picked = await vscode.window.showQuickPick(
 		versions.map((version) => ({
 			label: version,
-			description: version === tracked.version ? 'current' : '',
+			description: version === tracked.version ? 'Loaded' : '',
 		})),
 		{
 			title: `${tracked.nos.label}: Select model version`,
@@ -480,14 +295,7 @@ async function selectVersionForActiveDocument() {
 		return;
 	}
 
-	const applied = await applyVersionSelection(editor, tracked.nos.name, picked.label);
-	if (!applied) {
-		vscode.window.showWarningMessage('Could not update the document version directive.');
-		return;
-	}
-
-	documents.set(uri, { ...tracked, version: picked.label });
-	updateStatusBar();
+	await applyServerDirective(editor, tracked.nos.name, 'srpls.setVersion', uri, picked.label);
 }
 
 async function selectPlatformForActiveDocument() {
@@ -503,207 +311,59 @@ async function selectPlatformForActiveDocument() {
 		return;
 	}
 
+	if (tracked.nos.platforms.length === 0) {
+		vscode.window.showWarningMessage(`No known ${tracked.nos.label} platforms are available.`);
+		return;
+	}
+
 	const currentPlatform = tracked.platform || '';
-	let platform = '';
-
-	if (tracked.nos.name === 'srlinux') {
-		const options = Array.from(new Set([currentPlatform, ...SRLINUX_KNOWN_PLATFORMS].filter(Boolean)));
-		const pickItems: vscode.QuickPickItem[] = options.map((option) => ({
-			label: option,
-			description: option === currentPlatform ? 'current' : '',
-		}));
-		pickItems.push({ label: CUSTOM_PLATFORM_PICK, description: 'Enter a custom platform value' });
-
-		const picked = await vscode.window.showQuickPick(pickItems, {
-			title: 'SR Linux: Select platform',
-			placeHolder: 'Choose the platform used for interface validation',
-		});
-		if (!picked) {
-			return;
+	const picked = await vscode.window.showQuickPick(
+		tracked.nos.platforms.map((p) => ({
+			label: p,
+			description: p === currentPlatform ? 'Selected' : '',
+		})),
+		{
+			title: `${tracked.nos.label}: Select platform`,
+			placeHolder: 'Select the platform for interface & feature awareness. Default: 7220-IXR-D2L',
 		}
-
-		platform = picked.label;
-		if (platform === CUSTOM_PLATFORM_PICK) {
-			const custom = await vscode.window.showInputBox({
-				title: 'SR Linux: Custom platform',
-				prompt: 'Enter a platform name (for example 7220-IXR-D2L)',
-				value: currentPlatform,
-				ignoreFocusOut: true,
-				validateInput: (value) => value.trim() ? null : 'Platform must not be empty',
-			});
-			if (!custom) {
-				return;
-			}
-			platform = custom.trim();
-		}
-	} else {
-		const custom = await vscode.window.showInputBox({
-			title: `${tracked.nos.label}: Set platform`,
-			prompt: 'Enter a platform name',
-			value: currentPlatform,
-			ignoreFocusOut: true,
-			validateInput: (value) => value.trim() ? null : 'Platform must not be empty',
-		});
-		if (!custom) {
-			return;
-		}
-		platform = custom.trim();
-	}
-
-	if (platform === currentPlatform) {
+	);
+	if (!picked || picked.label === currentPlatform) {
 		return;
 	}
 
-	const applied = await applyPlatformSelection(editor, platform);
-	if (!applied) {
-		vscode.window.showWarningMessage('Could not update the document platform directive.');
+	const platform = picked.label;
+
+	await applyServerDirective(editor, tracked.nos.name, 'srpls.setPlatform', uri, platform);
+}
+
+async function applyServerDirective(editor: vscode.TextEditor, nos: NOSId, command: string, uri: string, value: string) {
+	const client = clients.get(nos);
+	if (!client) {
 		return;
 	}
-
-	documents.set(uri, { ...tracked, platform });
-	updateStatusBar();
-}
-
-function extractPlatformFromOpenDocument(uri: string): string {
-	const openDoc = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri);
-	if (!openDoc) {
-		return '';
-	}
-	return extractPlatformDirective(openDoc.getText());
-}
-
-function extractPlatformDirective(content: string): string {
-	const lines = content.split(/\r?\n/, PLATFORM_HEADER_SCAN_LINES + 1);
-	const scanLimit = Math.min(PLATFORM_HEADER_SCAN_LINES, lines.length);
-	for (let i = 0; i < scanLimit; i++) {
-		const match = PLATFORM_DIRECTIVE_CAPTURE_RE.exec(lines[i]);
-		if (match) {
-			return match[1];
+	try {
+		const result = await client.sendRequest('workspace/executeCommand', {
+			command,
+			arguments: [uri, value],
+		});
+		if (typeof result !== 'string') {
+			return;
 		}
+		const doc = editor.document;
+		const content = doc.getText();
+		if (result === content) {
+			return;
+		}
+		const fullRange = new vscode.Range(doc.positionAt(0), doc.positionAt(content.length));
+		await editor.edit((eb) => eb.replace(fullRange, result));
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showWarningMessage(`Could not update directive: ${msg}`);
 	}
-	return '';
 }
 
 function sortVersionsDescending(versions: string[]): string[] {
-	const sorted: string[] = [];
-	for (const version of versions) {
-		let inserted = false;
-		for (let i = 0; i < sorted.length; i++) {
-			if (compareVersionParts(version, sorted[i]) > 0) {
-				sorted.splice(i, 0, version);
-				inserted = true;
-				break;
-			}
-		}
-		if (!inserted) {
-			sorted.push(version);
-		}
-	}
-	return sorted;
-}
-
-function compareVersionParts(a: string, b: string): number {
-	const aParts = a.split('.').map(Number);
-	const bParts = b.split('.').map(Number);
-	const max = Math.max(aParts.length, bParts.length);
-	for (let i = 0; i < max; i++) {
-		const diff = (aParts[i] ?? 0) - (bParts[i] ?? 0);
-		if (diff !== 0) {
-			return diff;
-		}
-	}
-	return 0;
-}
-
-async function applyVersionSelection(editor: vscode.TextEditor, nos: NOSId, version: string): Promise<boolean> {
-	const doc = editor.document;
-	const content = doc.getText();
-	const eol = doc.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
-	const nextContent = nos === 'srlinux'
-		? withSRLinuxVersionDirective(content, version, eol)
-		: withSROSVersionDirective(content, version, eol);
-	return replaceWholeDocument(editor, content, nextContent);
-}
-
-async function applyPlatformSelection(editor: vscode.TextEditor, platform: string): Promise<boolean> {
-	const doc = editor.document;
-	const content = doc.getText();
-	const eol = doc.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
-	const nextContent = withPlatformDirective(content, platform, eol);
-	return replaceWholeDocument(editor, content, nextContent);
-}
-
-function withSRLinuxVersionDirective(content: string, version: string, eol: string): string {
-	const lines = content === '' ? [] : content.split(/\r?\n/);
-	const directive = `# version=${version}`;
-	const scanLimit = Math.min(5, lines.length);
-	let existingIdx = -1;
-	for (let i = 0; i < scanLimit; i++) {
-		if (VERSION_DIRECTIVE_RE.test(lines[i])) {
-			existingIdx = i;
-			break;
-		}
-	}
-
-	if (existingIdx === 0) {
-		lines[0] = directive;
-	} else {
-		if (existingIdx > 0) {
-			lines.splice(existingIdx, 1);
-		}
-		lines.unshift(directive);
-	}
-
-	return lines.join(eol);
-}
-
-function withSROSVersionDirective(content: string, version: string, eol: string): string {
-	const lines = content === '' ? [] : content.split(/\r?\n/);
-	const directive = `# Configuration format version ${version}`;
-	const scanLimit = Math.min(10, lines.length);
-	for (let i = 0; i < scanLimit; i++) {
-		if (SROS_FORMAT_VERSION_RE.test(lines[i])) {
-			lines[i] = directive;
-			return lines.join(eol);
-		}
-	}
-
-	lines.unshift(directive);
-	return lines.join(eol);
-}
-
-function withPlatformDirective(content: string, platform: string, eol: string): string {
-	const lines = content === '' ? [] : content.split(/\r?\n/);
-	const directive = `# platform=${platform}`;
-	const scanLimit = Math.min(PLATFORM_HEADER_SCAN_LINES, lines.length);
-	for (let i = 0; i < scanLimit; i++) {
-		if (PLATFORM_DIRECTIVE_RE.test(lines[i])) {
-			lines[i] = directive;
-			return lines.join(eol);
-		}
-	}
-
-	if (lines.length === 0) {
-		lines.push(directive);
-		return lines.join(eol);
-	}
-
-	lines.splice(1, 0, directive);
-	return lines.join(eol);
-}
-
-function replaceWholeDocument(editor: vscode.TextEditor, currentContent: string, nextContent: string): Thenable<boolean> {
-	if (currentContent === nextContent) {
-		return Promise.resolve(true);
-	}
-
-	const fullRange = new vscode.Range(
-		editor.document.positionAt(0),
-		editor.document.positionAt(currentContent.length),
-	);
-	return editor.edit((editBuilder) => {
-		editBuilder.replace(fullRange, nextContent);
-	});
+	return [...versions].sort((a, b) => semver.rcompare(semver.coerce(a)!, semver.coerce(b)!));
 }
 
 /** Find the LSP client for the given document's language. */
