@@ -442,13 +442,19 @@ async function getOrDownloadSrpls(extensionPath: string): Promise<string> {
 		throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
 	}
 
+	const asset = `srpls-${plat}-${arch}${ext}`;
+
 	let binPath = path.join(extensionPath, 'bin', `srpls${ext}`);
 	if (!fs.existsSync(binPath)) {
 		const srplsDir = path.join(os.homedir(), '.srpls');
 		binPath = path.join(srplsDir, `srpls${ext}`);
+
+		if (!fs.existsSync(binPath)) {
+			await installSrpls(binPath, asset, undefined);
+		}
 	}
 
-	checkForUpdate(binPath, `srpls-${plat}-${arch}${ext}`).catch(() => {});
+	checkForUpdate(binPath, asset).catch(() => {});
 
 	return binPath;
 }
