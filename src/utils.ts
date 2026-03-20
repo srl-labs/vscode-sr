@@ -21,7 +21,7 @@ export async function downloadFile(url: string, dst: string) {
 	await stream.promises.pipeline(stream.Readable.fromWeb(res.body), fs.createWriteStream(dst));
 }
 
-export async function extractTarball(tarPath: string, dstDir: string) {
+export async function extractTarball(tarPath: string, dstDir: string, strip = 1) {
 	fs.mkdirSync(dstDir, { 
 		recursive: true 
 	});
@@ -29,7 +29,7 @@ export async function extractTarball(tarPath: string, dstDir: string) {
 	await tar.x({
 		file: tarPath, 
 		cwd: dstDir, 
-		strip: 1 
+		strip 
 	});
 }
 

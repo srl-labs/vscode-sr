@@ -13,6 +13,7 @@ import * as semver from 'semver';
 import * as utils from './utils';
 
 const SRPLS_VERSION = 'v0.1.4';
+const SRPLS_RELEASE_VERSION = SRPLS_VERSION.replace(/^v/, '');
 const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
 
 let versionStatusBar: vscode.StatusBarItem;
@@ -448,7 +449,7 @@ async function getOrDownloadSrpls(extensionPath: string): Promise<string> {
 	const binPath = path.join(srplsDir, `srpls-${SRPLS_VERSION}-${plat}-${arch}${ext}`);
 
 	if (!fs.existsSync(binPath)) {
-		await installSrpls(binPath, `srpls-${plat}-${arch}${ext}`);
+		await installSrpls(binPath, `srpls_${SRPLS_RELEASE_VERSION}_${plat}_${arch}.tar.gz`);
 	}
 
 	return binPath;
@@ -461,14 +462,48 @@ async function installSrpls(binPath: string, asset: string): Promise<void> {
 	await vscode.window.withProgress(
 		{ location: vscode.ProgressLocation.Notification, title: `Downloading srpls ${SRPLS_VERSION}…` },
 		async () => {
-			const tmpPath = `${binPath}.tmp-${process.pid}`;
-			await utils.downloadFile(`${SRPLS_RELEASE_BASE_URL}/${asset}`, tmpPath);
-			if (process.platform !== 'win32') {
-				await fs.promises.chmod(tmpPath, 0o755);
+			const tmpBase = path.join(dir, `.srpls-${process.pid}-${Date.now()}`);
+			const tmpTarPath = `${tmpBase}.tar.gz`;
+			const tmpExtractDir = `${tmpBase}.extract`;
+			const expectedBin = process.platform === 'win32' ? 'srpls.exe' : 'srpls';
+
+			try {
+				await utils.downloadFile(`${SRPLS_RELEASE_BASE_URL}/${asset}`, tmpTarPath);
+				await utils.extractTarball(tmpTarPath, tmpExtractDir, 0);
+
+				const extractedBin = findFileByName(tmpExtractDir, expectedBin);
+				if (!fs.existsSync(extractedBin)) {
+					throw new Error(`Asset ${asset} does not contain ${expectedBin}`);
+				}
+
+				if (process.platform !== 'win32') {
+					await fs.promises.chmod(extractedBin, 0o755);
+				}
+				await fs.promises.rename(extractedBin, binPath);
+			} finally {
+				await fs.promises.rm(tmpTarPath, { force: true });
+				await fs.promises.rm(tmpExtractDir, { recursive: true, force: true });
 			}
-			await fs.promises.rename(tmpPath, binPath);
 		}
 	);
+}
+
+function findFileByName(rootDir: string, fileName: string): string {
+	const pending = [rootDir];
+	while (pending.length > 0) {
+		const current = pending.pop()!;
+		const entries = fs.readdirSync(current, { withFileTypes: true });
+		for (const entry of entries) {
+			const fullPath = path.join(current, entry.name);
+			if (entry.isFile() && entry.name === fileName) {
+				return fullPath;
+			}
+			if (entry.isDirectory()) {
+				pending.push(fullPath);
+			}
+		}
+	}
+	return path.join(rootDir, fileName);
 }
 
 function shouldTriggerSuggestForChange(change: vscode.TextDocumentContentChangeEvent): boolean {
