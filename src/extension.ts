@@ -12,7 +12,7 @@ import { srlinux } from './srlinux';
 import * as semver from 'semver';
 import * as utils from './utils';
 
-const SRPLS_VERSION = 'v0.1.3';
+const SRPLS_VERSION = 'v0.1.4';
 const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
 
 let versionStatusBar: vscode.StatusBarItem;
