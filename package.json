@@ -5,10 +5,10 @@
 	"description": "VS Code language server extension for Nokia SR Linux and SR OS",
 	"author": "SRL Labs",
 	"license": "GPL-2.0-only",
-	"version": "0.1.1",
+	"version": "0.1.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/srl-labs/vscode-sr"
+		"url": "https://github.com/srl-labs/sr-vscode"
 	},
 	"categories": [
 		"Language Packs",
