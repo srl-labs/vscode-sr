@@ -33,13 +33,12 @@ jobs:
           TAG_NAME="${{ github.event.release.tag_name }}"
           TAG_VERSION="${TAG_NAME#v}"
           PACKAGE_NAME=$(node -p "require('./package.json').name")
-          PRERELEASE=$(node -p "Boolean(require('semver').prerelease('${TAG_VERSION}'))")
 
           npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
           echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
           echo "package=$TAG_VERSION" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${{ github.event.release.prerelease }}" >> "$GITHUB_OUTPUT"
 
       - name: Run linter
         run: |
