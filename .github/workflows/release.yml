@@ -74,7 +74,10 @@ jobs:
           fi
 
       - name: Package extension
-        run: npx vsce package -o "${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix"
+        run: >
+          npx vsce package
+          -o "${{ steps.version.outputs.name }}-${{ steps.version.outputs.package }}.vsix"
+          ${{ steps.version.outputs.prerelease == 'true' && '--pre-release' || '' }}
 
       - name: Check for publish tokens
         id: check-pat
