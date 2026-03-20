@@ -381,6 +381,7 @@ async function convertDocument(editor: vscode.TextEditor) {
 	const doc = editor.document;
 	const content = doc.getText();
 	const uri = doc.uri.toString();
+	const cursorLine = editor.selection.active.line;
 	const client = getClientForDocument(doc);
 
 	if (!client) {
@@ -389,16 +390,22 @@ async function convertDocument(editor: vscode.TextEditor) {
 	}
 
 	let newContent: string;
+	let targetLine = 0;
 	try {
 		const result = await client.sendRequest('workspace/executeCommand', {
 			command: 'srpls.convert',
-			arguments: [uri, content],
-		});
-		if (typeof result !== 'string') {
+			arguments: [uri, content, cursorLine],
+		}) as { content: string; cursorLine: number } | string;
+
+		if (typeof result === 'string') {
+			newContent = result;
+		} else if (result && typeof result === 'object' && 'content' in result) {
+			newContent = result.content;
+			targetLine = result.cursorLine ?? 0;
+		} else {
 			vscode.window.showWarningMessage('Conversion failed: unexpected server response');
 			return;
 		}
-		newContent = result;
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : String(e);
 		vscode.window.showWarningMessage(`Conversion failed: ${msg}`);
@@ -413,6 +420,10 @@ async function convertDocument(editor: vscode.TextEditor) {
 	await editor.edit(editBuilder => {
 		editBuilder.replace(fullRange, newContent);
 	});
+
+	const pos = new vscode.Position(targetLine, 0);
+	editor.selection = new vscode.Selection(pos, pos);
+	editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
 }
 
 export async function deactivate(): Promise<void> {
