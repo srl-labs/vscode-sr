@@ -70,6 +70,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
+	await Promise.all((Object.values(nosMap) as NOS[]).map(nos => nos.fetchVersionMap()));
+
 	const startPromises = (Object.entries(nosMap) as [NOSId, NOS][]).map(([id, nos]) => {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
 
@@ -98,12 +100,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 	await Promise.all(startPromises);
 
-	// Fetch known platforms from each server
+	// Send latest version and fetch known platforms from each server
 	for (const [id, nos] of Object.entries(nosMap) as [NOSId, NOS][]) {
 		const client = clients.get(id);
 		if (!client) {
 			continue;
 		}
+
+		const latest = nos.latestVersion();
+		if (latest) {
+			try {
+				await client.sendRequest('workspace/executeCommand', {
+					command: 'srpls.setDefaultVersion',
+					arguments: [latest],
+				});
+			} catch { /* server may not support it yet */ }
+		}
+
 		try {
 			const result = await client.sendRequest('workspace/executeCommand', {
 				command: 'srpls.knownPlatforms',
@@ -151,16 +164,22 @@ function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
 	});
 
 	client.onNotification('srpls/modelsNotFound', async (params: ModelsNotFoundParams) => {
-		let version = params.version;
-		if (!nos.isKnownVersion(version)) {
-			version = nos.latestVersion();
+		const version = params.version;
+		if (!version || !nos.isKnownVersion(version)) {
+			vscode.window.showWarningMessage(
+				`No YANG models available for ${nos.label} ${version || '(unknown version)'}`
+			);
+			return;
 		}
 
 		if (!await nos.downloadYangModels(version)) {
 			return;
 		}
 
-		await client.restart();
+		await client.sendRequest('workspace/executeCommand', {
+			command: 'srpls.reloadVersion',
+			arguments: [params.uri],
+		});
 	});
 }
 
@@ -179,14 +198,14 @@ function updateStatusBar() {
 		return;
 	}
 
-	const dot = doc.modelsLoaded ? '$(pass-filled)' : '$(circle-large-outline)';
+	const dot = doc.modelsLoaded ? '$(pass-filled)' : '$(error)';
 	versionStatusBar.text = `$(tag) ${doc.nos.label} ${doc.version} ${dot}`;
 	versionStatusBar.tooltip = doc.modelsLoaded
 		? `${doc.version} YANG models loaded`
 		: `${doc.version} YANG models not loaded`;
 	versionStatusBar.backgroundColor = doc.modelsLoaded
 		? undefined
-		: new vscode.ThemeColor('statusBarItem.warningBackground');
+		: new vscode.ThemeColor('statusBarItem.errorBackground');
 	versionStatusBar.show();
 
 	if (doc.nos.platforms.length > 0) {
