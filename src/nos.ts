@@ -26,10 +26,7 @@ export interface TrackedDocument {
 	modelsLoaded: boolean;
 }
 
-interface ModelEntry {
-	version: string;
-	model: string;
-}
+export type TagParser = (tag: string) => string | null;
 
 export class NOS {
 	public readonly yangDir: string;
@@ -42,21 +39,47 @@ export class NOS {
 		public readonly label: string,
 		public readonly cfgSuffix: string,
 		private readonly dirPrefix: string,
+		public readonly repo: string,
+		private readonly parseTag: TagParser,
 	) {
 		this.yangDir = path.join(os.homedir(), '.srpls', name, 'yang');
 	}
 
-	private getVersionMap(): Record<string, string> {
-		if (!this.versionMap) {
-			const jsonPath = path.join(__dirname, '..', this.name, 'models.json');
-			const raw: Record<string, ModelEntry[]> = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-			const entries = raw[this.name];
-			this.versionMap = {};
-			for (const e of entries) {
-				this.versionMap[e.version] = e.model;
-			}
+	async fetchVersionMap(): Promise<void> {
+		const tags = await this.fetchAllTags();
+		this.versionMap = {};
+		for (const tag of tags) {
+			const version = this.parseTag(tag);
+			if (!version) { continue; }
+			this.versionMap[version] = `https://api.github.com/repos/${this.repo}/tarball/refs/tags/${tag}`;
 		}
-		return this.versionMap!;
+	}
+
+	private async fetchAllTags(): Promise<string[]> {
+		const tags: string[] = [];
+		let page = 1;
+		while (true) {
+			const res = await fetch(
+				`https://api.github.com/repos/${this.repo}/tags?per_page=100&page=${page}`,
+				{
+					headers: {
+						'Accept': 'application/vnd.github+json',
+						'User-Agent': 'sr-vscode',
+					},
+				}
+			);
+			if (!res.ok) { break; }
+			const data = await res.json() as Array<{ name: string }>;
+			if (data.length === 0) { break; }
+			tags.push(...data.map(t => t.name));
+			if (data.length < 100) { break; }
+			page++;
+		}
+		return tags;
+	}
+
+	private getVersionMap(): Record<string, string> {
+		return this.versionMap ?? {};
 	}
 
 	knownVersions(): string[] {

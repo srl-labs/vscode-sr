@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as child_process from 'child_process';
 import * as vscode from 'vscode';
 import * as lsp from 'vscode-languageclient/node';
 import {
@@ -12,8 +13,7 @@ import { srlinux } from './srlinux';
 import * as semver from 'semver';
 import * as utils from './utils';
 
-const SRPLS_VERSION = 'v0.1.4';
-const SRPLS_RELEASE_BASE_URL = `https://github.com/srl-labs/srpls/releases/download/${SRPLS_VERSION}`;
+const SRPLS_REPO = 'srl-labs/srpls';
 
 let versionStatusBar: vscode.StatusBarItem;
 let platformStatusBar: vscode.StatusBarItem;
@@ -66,9 +66,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		cmd = await getOrDownloadSrpls(context.extensionPath);
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : String(e);
-		vscode.window.showErrorMessage(`Failed to prepare srpls ${SRPLS_VERSION}: ${msg}`);
+		vscode.window.showErrorMessage(`Failed to prepare srpls: ${msg}`);
 		return;
 	}
+
+	await Promise.all((Object.values(nosMap) as NOS[]).map(nos => nos.fetchVersionMap()));
 
 	const startPromises = (Object.entries(nosMap) as [NOSId, NOS][]).map(([id, nos]) => {
 		fs.mkdirSync(nos.yangDir, { recursive: true });
@@ -98,12 +100,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 	await Promise.all(startPromises);
 
-	// Fetch known platforms from each server
+	// Send latest version and fetch known platforms from each server
 	for (const [id, nos] of Object.entries(nosMap) as [NOSId, NOS][]) {
 		const client = clients.get(id);
 		if (!client) {
 			continue;
 		}
+
+		const latest = nos.latestVersion();
+		if (latest) {
+			try {
+				await client.sendRequest('workspace/executeCommand', {
+					command: 'srpls.setDefaultVersion',
+					arguments: [latest],
+				});
+			} catch { /* server may not support it yet */ }
+		}
+
 		try {
 			const result = await client.sendRequest('workspace/executeCommand', {
 				command: 'srpls.knownPlatforms',
@@ -151,16 +164,22 @@ function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
 	});
 
 	client.onNotification('srpls/modelsNotFound', async (params: ModelsNotFoundParams) => {
-		let version = params.version;
-		if (!nos.isKnownVersion(version)) {
-			version = nos.latestVersion();
+		const version = params.version;
+		if (!version || !nos.isKnownVersion(version)) {
+			vscode.window.showWarningMessage(
+				`No YANG models available for ${nos.label} ${version || '(unknown version)'}`
+			);
+			return;
 		}
 
 		if (!await nos.downloadYangModels(version)) {
 			return;
 		}
 
-		await client.restart();
+		await client.sendRequest('workspace/executeCommand', {
+			command: 'srpls.reloadVersion',
+			arguments: [params.uri],
+		});
 	});
 }
 
@@ -179,20 +198,24 @@ function updateStatusBar() {
 		return;
 	}
 
-	const dot = doc.modelsLoaded ? '$(pass-filled)' : '$(circle-large-outline)';
+	const dot = doc.modelsLoaded ? '$(pass-filled)' : '$(error)';
 	versionStatusBar.text = `$(tag) ${doc.nos.label} ${doc.version} ${dot}`;
 	versionStatusBar.tooltip = doc.modelsLoaded
 		? `${doc.version} YANG models loaded`
 		: `${doc.version} YANG models not loaded`;
 	versionStatusBar.backgroundColor = doc.modelsLoaded
 		? undefined
-		: new vscode.ThemeColor('statusBarItem.warningBackground');
+		: new vscode.ThemeColor('statusBarItem.errorBackground');
 	versionStatusBar.show();
 
-	const platform = doc.platform || 'unset';
-	platformStatusBar.text = `$(server) ${platform}`;
-	platformStatusBar.tooltip = `Click to select platform`;
-	platformStatusBar.show();
+	if (doc.nos.platforms.length > 0) {
+		const platform = doc.platform || 'unset';
+		platformStatusBar.text = `$(server) ${platform}`;
+		platformStatusBar.tooltip = `Click to select platform`;
+		platformStatusBar.show();
+	} else {
+		platformStatusBar.hide();
+	}
 }
 
 async function createNewSRConfig() {
@@ -312,7 +335,6 @@ async function selectPlatformForActiveDocument() {
 	}
 
 	if (tracked.nos.platforms.length === 0) {
-		vscode.window.showWarningMessage(`No known ${tracked.nos.label} platforms are available.`);
 		return;
 	}
 
@@ -433,36 +455,105 @@ export async function deactivate(): Promise<void> {
 async function getOrDownloadSrpls(extensionPath: string): Promise<string> {
 	const ext = process.platform === 'win32' ? '.exe' : '';
 
-	const localBin = path.join(extensionPath, 'bin', `srpls${ext}`);
-	if (fs.existsSync(localBin)) {
-		return localBin;
-	}
-
 	const plat = PLATFORMS[process.platform];
 	const arch = ARCHS[process.arch];
 	if (!plat || !arch) {
 		throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
 	}
 
-	const srplsDir = path.join(os.homedir(), '.srpls');
-	const binPath = path.join(srplsDir, `srpls-${SRPLS_VERSION}-${plat}-${arch}${ext}`);
+	const asset = `srpls-${plat}-${arch}${ext}`;
 
+	let binPath = path.join(extensionPath, 'bin', `srpls${ext}`);
 	if (!fs.existsSync(binPath)) {
-		await installSrpls(binPath, `srpls-${plat}-${arch}${ext}`);
+		const srplsDir = path.join(os.homedir(), '.srpls');
+		binPath = path.join(srplsDir, `srpls${ext}`);
+
+		if (!fs.existsSync(binPath)) {
+			await installSrpls(binPath, asset, undefined);
+		}
 	}
+
+	checkForUpdate(binPath, asset).catch(() => {});
 
 	return binPath;
 }
 
-async function installSrpls(binPath: string, asset: string): Promise<void> {
+function getSrplsVersion(binPath: string): string | null {
+	try {
+		const out = child_process.execFileSync(binPath, ['-version'], { timeout: 5000 });
+		return semver.clean(out.toString().trim());
+	} catch {
+		return null;
+	}
+}
+
+async function getLatestRelease(): Promise<{ tag: string; version: string } | null> {
+	try {
+		const res = await fetch(`https://api.github.com/repos/${SRPLS_REPO}/releases/latest`, {
+			headers: {
+				'Accept': 'application/vnd.github+json',
+				'User-Agent': 'sr-vscode',
+			},
+		});
+
+		if (!res.ok) { 
+			return null; 
+		}
+
+		const data = await res.json() as { tag_name: string };
+		const version = semver.clean(data.tag_name);
+
+		if (!version) { 
+			return null; 
+		}
+
+		return { 
+			tag: data.tag_name, version 
+		};
+		
+	} catch {
+		return null;
+	}
+}
+
+async function checkForUpdate(binPath: string, asset: string): Promise<void> {
+	const current = getSrplsVersion(binPath);
+	const latest = await getLatestRelease();
+	if (!current || !latest) { return; }
+	if (!semver.gt(latest.version, current)) { return; }
+
+	const choice = await vscode.window.showInformationMessage(
+		`srpls ${latest.tag} is available (current: v${current})`,
+		'Update', 'Dismiss'
+	);
+	if (choice !== 'Update') { return; }
+
+	await installSrpls(binPath, asset, latest.tag);
+	const reload = await vscode.window.showInformationMessage(
+		`srpls updated to ${latest.tag}. Reload to use the new version.`,
+		'Reload'
+	);
+	if (reload === 'Reload') {
+		await vscode.commands.executeCommand('workbench.action.reloadWindow');
+	}
+}
+
+async function installSrpls(binPath: string, asset: string, tag: string | undefined): Promise<void> {
 	const dir = path.dirname(binPath);
 	fs.mkdirSync(dir, { recursive: true });
 
+	const resolvedTag = tag ?? (await getLatestRelease())?.tag;
+	if (!resolvedTag) {
+		throw new Error('Could not determine latest srpls release');
+	}
+
+	const url = `https://github.com/${SRPLS_REPO}/releases/download/${resolvedTag}/${asset}`;
+
 	await vscode.window.withProgress(
-		{ location: vscode.ProgressLocation.Notification, title: `Downloading srpls ${SRPLS_VERSION}…` },
+		{ location: vscode.ProgressLocation.Notification, title: `Downloading srpls ${resolvedTag}…` },
 		async () => {
 			const tmpPath = `${binPath}.tmp-${process.pid}`;
-			await utils.downloadFile(`${SRPLS_RELEASE_BASE_URL}/${asset}`, tmpPath);
+			await utils.downloadFile(url, tmpPath);
 			if (process.platform !== 'win32') {
 				await fs.promises.chmod(tmpPath, 0o755);
 			}
