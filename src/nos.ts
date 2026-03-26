@@ -10,6 +10,7 @@ export interface VersionDetectedParams {
 	uri: string;
 	version: string;
 	platform: string;
+	format?: string;
 	modelsLoaded: boolean;
 	loadedVersion?: string;
 }
@@ -24,6 +25,7 @@ export interface TrackedDocument {
 	nos: NOS;
 	version: string;
 	platform: string;
+	format?: string;
 	modelsLoaded: boolean;
 	loadedVersion?: string;
 }

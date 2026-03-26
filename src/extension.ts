@@ -153,14 +153,32 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('srSyntax.selectPlatform', async () => {
 			await selectPlatformForActiveDocument();
 		}),
+		vscode.commands.registerCommand('srSyntax.gotoPath', async () => {
+			await gotoPath();
+		}),
 	);
 }
 
 function registerNotifications(client: lsp.LanguageClient, nos: NOS) {
+	client.onNotification('srpls/formatDetected', (params: { uri: string; format: string }) => {
+		const doc = documents.get(params.uri);
+		if (doc) {
+			doc.format = params.format;
+		} else {
+			documents.set(params.uri, {
+				nos, version: '', platform: '',
+				format: params.format,
+				modelsLoaded: false,
+			});
+		}
+		updateStatusBar();
+	});
+
 	client.onNotification('srpls/versionDetected', (params: VersionDetectedParams) => {
 		const platform = params.platform || '';
 		documents.set(params.uri, {
 			nos, version: params.version, platform,
+			format: params.format,
 			modelsLoaded: params.modelsLoaded,
 			loadedVersion: params.loadedVersion,
 		});
@@ -201,6 +219,7 @@ function updateStatusBar() {
 	if (!editor) {
 		versionStatusBar.hide();
 		platformStatusBar.hide();
+		vscode.commands.executeCommand('setContext', 'srSyntax.isBraceFormat', false);
 		return;
 	}
 
@@ -208,8 +227,11 @@ function updateStatusBar() {
 	if (!doc) {
 		versionStatusBar.hide();
 		platformStatusBar.hide();
+		vscode.commands.executeCommand('setContext', 'srSyntax.isBraceFormat', false);
 		return;
 	}
+
+	vscode.commands.executeCommand('setContext', 'srSyntax.isBraceFormat', doc.format === 'brace');
 
 	const isFallback = doc.loadedVersion && doc.loadedVersion !== doc.version;
 	if (isFallback) {
@@ -465,6 +487,47 @@ async function convertDocument(editor: vscode.TextEditor) {
 	const pos = new vscode.Position(targetLine, 0);
 	editor.selection = new vscode.Selection(pos, pos);
 	editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+}
+
+async function gotoPath() {
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) { return; }
+
+	const client = getClientForDocument(editor.document);
+	if (!client) { return; }
+
+	const pathInput = await vscode.window.showInputBox({
+		prompt: 'Enter YANG path',
+		placeHolder: '/configure ...',
+	});
+	if (!pathInput) { 
+		return; 
+	}
+
+	const uri = editor.document.uri.toString();
+	const content = editor.document.getText();
+
+	try {
+		const result = await client.sendRequest('workspace/executeCommand', {
+			command: 'srpls.gotoPath',
+			arguments: [uri, content, pathInput],
+		}) as { line: number; exact: boolean } | null;
+
+		if (!result || result.line < 0) {
+			return;
+		}
+
+		const pos = new vscode.Position(result.line, 0);
+		editor.selection = new vscode.Selection(pos, pos);
+		editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+
+		if (!result.exact) {
+			vscode.window.setStatusBarMessage('Jumped to closest matching path', 3000);
+		}
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		vscode.window.showWarningMessage(`Go to path failed: ${msg}`);
+	}
 }
 
 export async function deactivate(): Promise<void> {

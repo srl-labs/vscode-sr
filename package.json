@@ -79,6 +79,11 @@
 			{
 				"command": "srSyntax.selectPlatform",
 				"title": "SR Syntax: Select Platform"
+			},
+			{
+				"command": "srSyntax.gotoPath",
+				"title": "Go to YANG Path",
+				"icon": "$(search)"
 			}
 		],
 		"menus": {
@@ -86,6 +91,11 @@
 				{
 					"command": "srSyntax.toggleFormat",
 					"when": "resourceLangId == srlinux || resourceLangId == sros",
+					"group": "navigation"
+				},
+				{
+					"command": "srSyntax.gotoPath",
+					"when": "srSyntax.isBraceFormat && (resourceLangId == srlinux || resourceLangId == sros)",
 					"group": "navigation"
 				}
 			]
