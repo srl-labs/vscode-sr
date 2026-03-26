@@ -11,6 +11,7 @@ export interface VersionDetectedParams {
 	version: string;
 	platform: string;
 	modelsLoaded: boolean;
+	loadedVersion?: string;
 }
 
 export interface ModelsNotFoundParams {
@@ -24,6 +25,7 @@ export interface TrackedDocument {
 	version: string;
 	platform: string;
 	modelsLoaded: boolean;
+	loadedVersion?: string;
 }
 
 export type TagParser = (tag: string) => string | null;
