@@ -496,38 +496,36 @@ async function gotoPath() {
 	const client = getClientForDocument(editor.document);
 	if (!client) { return; }
 
-	const pathInput = await vscode.window.showInputBox({
-		prompt: 'Enter YANG path',
-		placeHolder: '/configure ...',
-	});
-	if (!pathInput) { 
-		return; 
-	}
-
 	const uri = editor.document.uri.toString();
 	const content = editor.document.getText();
 
+	let paths: Array<{ line: number; path: string }>;
 	try {
-		const result = await client.sendRequest('workspace/executeCommand', {
-			command: 'srpls.gotoPath',
-			arguments: [uri, content, pathInput],
-		}) as { line: number; exact: boolean } | null;
-
-		if (!result || result.line < 0) {
-			return;
-		}
-
-		const pos = new vscode.Position(result.line, 0);
-		editor.selection = new vscode.Selection(pos, pos);
-		editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
-
-		if (!result.exact) {
-			vscode.window.setStatusBarMessage('Jumped to closest matching path', 3000);
-		}
-	} catch (e: unknown) {
-		const msg = e instanceof Error ? e.message : String(e);
-		vscode.window.showWarningMessage(`Go to path failed: ${msg}`);
+		paths = await client.sendRequest('workspace/executeCommand', {
+			command: 'srpls.documentPaths',
+			arguments: [uri, content],
+		}) as Array<{ line: number; path: string }>;
+	} catch {
+		return;
 	}
+	if (!paths || paths.length === 0) { return; }
+
+	const items = paths.map(p => ({
+		label: p.path,
+		description: `line ${p.line + 1}`,
+		line: p.line,
+	}));
+
+	const picked = await vscode.window.showQuickPick(items, {
+		title: 'Go to YANG Path',
+		placeHolder: 'Type to search YANG paths...',
+		matchOnDescription: true,
+	});
+	if (!picked) { return; }
+
+	const pos = new vscode.Position(picked.line, 0);
+	editor.selection = new vscode.Selection(pos, pos);
+	editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
 }
 
 export async function deactivate(): Promise<void> {
