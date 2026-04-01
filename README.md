@@ -14,25 +14,25 @@ A VS Code language server extension for Nokia SR OS and SR Linux configuration f
 
 See the location of the physical port on the box by higlighting the port in the config file.
 
-![](https://gitlab.com/kaelemc/wiki/-/wikis/uploads/00ce27c1e30921ce37546b0076b8d4d9/s3.gif)
+https://github.com/user-attachments/assets/74d6e501-0e54-4f17-996c-9ac752ac637f
 
 ### Version aware
 
 Based on the SR Linux & SR OS (model-driven) YANG Models, check the config against the YANG model for any given software release.
 
-![](https://gitlab.com/kaelemc/wiki/-/wikis/uploads/ce2c2393d7fa77d08f1b53610e16a3aa/s4.gif)
+https://github.com/user-attachments/assets/4010ebd3-8497-4dc6-a095-baff0d1fa820
 
 ### Quick search
 
 Use the flat config path syntax to jump to positions in a braced-format config file. Makes working with huge config files easy.
 
-![](https://gitlab.com/kaelemc/wiki/-/wikis/uploads/7139b6889f382285f147ad32e70930c1/s1.gif)
+https://github.com/user-attachments/assets/af0da4e2-9a9c-46d0-9d6d-bafeb7bbc015
 
 ### Flatten/Unflatten
 
 Easily convert the config file between flat/braced formats.
 
-![](https://gitlab.com/kaelemc/wiki/-/wikis/uploads/796c4520704e64ddcd39f7b6cb138647/s2.gif)
+https://github.com/user-attachments/assets/93efae67-ae7e-4663-848e-7beee9be3323
 
 ## Quickstart
 
