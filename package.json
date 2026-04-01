@@ -8,7 +8,7 @@
 	"version": "0.1.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/srl-labs/sr-vscode"
+		"url": "https://github.com/srl-labs/vscode-sr"
 	},
 	"categories": [
 		"Language Packs",
